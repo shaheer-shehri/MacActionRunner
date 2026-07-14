@@ -1,0 +1,27 @@
+{
+  "_comment": "QR placement per layout key (SHAPE_SIZE). qr_box is FRACTIONAL (fx,fy of width/height; fsize = side as fraction of width) so it is resolution-independent and identical for A5/A6 of a shape. MEASURED from the empty QR window in the blank templates and cross-checked against the finished sample PDFs (D02 window centre matched the printed QR centre exactly). page_*_pt are the template MediaBox sizes.",
+  "D02_A5": {
+    "qr_box": { "fx": 0.57375, "fy": 0.42352, "fsize": 0.32814, "quiet_modules": 4 },
+    "page_w_pt": 522.904,
+    "page_h_pt": 595.274,
+    "_measured_px": "1539x1752 @ ~212dpi; window x883 y742 505x505"
+  },
+  "D02_A6": {
+    "qr_box": { "fx": 0.57375, "fy": 0.42352, "fsize": 0.32814, "quiet_modules": 4 },
+    "page_w_pt": 368.523,
+    "page_h_pt": 419.528,
+    "_measured_px": "1539x1752; same design as D02_A5, smaller page"
+  },
+  "D01_A5": {
+    "qr_box": { "fx": 0.29448, "fy": 0.28548, "fsize": 0.41160, "quiet_modules": 4 },
+    "page_w_pt": 422.160,
+    "page_h_pt": 595.200,
+    "_measured_px": "1759x2480 @ 300dpi; window x518 y708 724x725"
+  },
+  "D01_A6": {
+    "qr_box": { "fx": 0.29448, "fy": 0.28548, "fsize": 0.41160, "quiet_modules": 4 },
+    "page_w_pt": 297.600,
+    "page_h_pt": 419.520,
+    "_measured_px": "1240x1748; same design as D01_A5, smaller page"
+  }
+}
