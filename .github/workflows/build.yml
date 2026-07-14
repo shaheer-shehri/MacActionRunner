@@ -38,19 +38,27 @@ jobs:
       - name: Build
         run: python -m PyInstaller --noconfirm --clean NFCPrintTool.spec
 
-      - name: Package macOS .dmg
+      - name: Package macOS (zip + best-effort dmg)
         if: runner.os == 'macOS'
         run: |
-          hdiutil create -volname "NFC Print Tool" \
-            -srcfolder "dist/NFCPrintTool.app" -ov -format UDZO \
-            "dist/NFCPrintTool.dmg"
+          set -e
+          # Reliable: zip that preserves the .app bundle (symlinks, exec bits)
+          ditto -c -k --keepParent "dist/NFCPrintTool.app" "dist/NFCPrintTool-app.zip"
+          # .dmg is best-effort — hdiutil can hit transient "Resource busy" on runners
+          ( for i in 1 2 3 4 5; do
+              hdiutil create -volname "NFC Print Tool" \
+                -srcfolder "dist/NFCPrintTool.app" -ov -format UDZO \
+                "dist/NFCPrintTool.dmg" && exit 0
+              echo "hdiutil busy, retry $i…"; sleep 12
+            done; echo "dmg step skipped after retries (non-fatal; use the zip)" ) || true
 
       - name: Upload artifact
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
             dist/NFCPrintTool.exe
-            dist/NFCPrintTool.app
+            dist/NFCPrintTool-app.zip
             dist/NFCPrintTool.dmg
           if-no-files-found: ignore
