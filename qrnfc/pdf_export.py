@@ -76,13 +76,16 @@ def build_pdf(out_path: str, rgb: Image.Image, white: Image.Image,
         ExtGState=Dictionary(GsOP=gs),
     )
     w, h = page_w_pt, page_h_pt
-    # Draw order: white Spot_Weiss base FIRST (overprint, scoped to its q/Q),
-    # then the colour artwork ON TOP so screen preview shows the artwork — not a
-    # blank white overlay — while the spot channel is still a full separation for
-    # the RIP. (White under colour is also the correct UV laydown order.)
+    # Draw order MUST be colour art first, then the Spot_Weiss white ON TOP with
+    # overprint. This is the only order the client's RIP keeps the spot channel:
+    # the white *overprints* the art (no knockout), so both separations survive.
+    # Drawing opaque art on top instead KNOCKS OUT the spot -> RIP loses Spot_Weiss
+    # (confirmed by the client). Trade-off: on-screen preview shows a white page;
+    # that is accepted, since the RIP separation view + print are correct.
     content = (
-        f"q /GsOP gs {w:.3f} 0 0 {h:.3f} 0 0 cm /White Do Q\n"
         f"q {w:.3f} 0 0 {h:.3f} 0 0 cm /Art Do Q\n"
+        f"/GsOP gs\n"
+        f"q {w:.3f} 0 0 {h:.3f} 0 0 cm /White Do Q\n"
     ).encode("latin1")
     page.Contents = pdf.make_stream(content)
 
