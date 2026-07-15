@@ -99,8 +99,9 @@ def render_order(order: Order, cfg: AppConfig) -> str:
     if not layout:
         raise KeyError(f"no QR layout configured for {v.layout_key}")
 
+    qr_white = v.colour in cfg.white_qr_colours   # dark stock -> white-ink QR
     rgb, white = compose(tpl, order.final_link, layout.qr_box,
-                         white_behind_qr=cfg.white_behind_qr)
+                         white_behind_qr=cfg.white_behind_qr, qr_white=qr_white)
 
     os.makedirs(cfg.output_root, exist_ok=True)
     order.output_path = os.path.join(cfg.output_root, _out_name(order))

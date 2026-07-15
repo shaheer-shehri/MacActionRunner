@@ -14,7 +14,7 @@ from typing import Optional
 from .models import Order, Variant
 
 SHAPES = {"D01", "D02"}
-COLOURS = {"BLK", "TRP", "WHT"}
+COLOURS = {"BLK", "TRP", "WHT", "HDF"}
 SIZES = {"A5", "A6"}
 
 # Material only ever appears as text in the CSV "Material:" line; it never
@@ -29,7 +29,7 @@ MATERIAL_CODES = {
     "WNT": ["walnuss", "nussbaum", "walnut", "noyer", "noce", "nogal", "noce nazionale"],
 }
 
-_SKU_RE = re.compile(r"(D0\d)[_-]?(BLK|TRP|WHT)[_-]?(A\d)", re.IGNORECASE)
+_SKU_RE = re.compile(r"(D0\d)[_-]?(BLK|TRP|WHT|HDF)[_-]?(A\d)", re.IGNORECASE)
 
 
 def decode_variant(order: Order) -> Optional[Variant]:

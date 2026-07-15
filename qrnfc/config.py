@@ -35,6 +35,8 @@ class AppConfig:
     spot_name: str = "Spot_Weiss"
     overprint: bool = True
     white_behind_qr: bool = True
+    # colour codes whose QR must be WHITE ink (dark materials): black acrylic, HDF
+    white_qr_colours: tuple = ("BLK", "HDF")
 
     @property
     def templates_root(self) -> str:
@@ -68,6 +70,7 @@ def load(root: str) -> AppConfig:
         spot_name=settings.get("spot_name", "Spot_Weiss"),
         overprint=settings.get("overprint", True),
         white_behind_qr=settings.get("white_behind_qr", True),
+        white_qr_colours=tuple(settings.get("white_qr_colours", ("BLK", "HDF"))),
     )
 
 

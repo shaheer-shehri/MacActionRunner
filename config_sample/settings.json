@@ -1,5 +1,6 @@
 {
   "spot_name": "Spot_Weiss",
   "overprint": true,
-  "white_behind_qr": true
+  "white_behind_qr": true,
+  "white_qr_colours": ["BLK", "HDF"]
 }

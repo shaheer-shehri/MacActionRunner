@@ -2,9 +2,14 @@
 
 Produces the two rasters the PDF exporter needs:
   * ``rgb``   – RGB artwork (template colours flattened, with QR painted in)
-  * ``white`` – 8-bit Spot-White mask (template alpha, plus white behind the QR
-                on non-white materials so the black modules stay opaque on
-                transparent/black substrates)
+  * ``white`` – 8-bit Spot-White mask (template alpha + the QR's white contribution)
+
+Two QR modes (see ``compose``):
+  * BLACK QR (white/transparent stock): black colour modules on a solid white-ink
+    base behind the whole window, so the code reads on transparent/dark substrates.
+  * WHITE QR (black acrylic / HDF): the modules ARE white ink (in the spot channel)
+    and the gaps are bare dark material — matching the white text on those
+    templates, because black barely shows on black acrylic / wood.
 """
 from __future__ import annotations
 
@@ -48,6 +53,7 @@ def make_qr(link: str, box: QRBox, size_px: int) -> Image.Image:
 def compose(template_png: str, link: str, box: QRBox,
             white_behind_qr: bool = True,
             white_bleed_px: int = 5,
+            qr_white: bool = False,
             background=(255, 255, 255)) -> tuple[Image.Image, Image.Image]:
     tpl = Image.open(template_png).convert("RGBA")
     W, H = tpl.size
@@ -61,19 +67,25 @@ def compose(template_png: str, link: str, box: QRBox,
     flat = (rgb.astype(float) * a + bg * (1 - a)).astype(np.uint8)
 
     x, y, s = box.pixels(W, H)
-    qr = np.asarray(make_qr(link, box, s))  # (s, s, 3)
     if x + s > W or y + s > H:
         raise ValueError(f"QR box {box} -> ({x},{y},{s}) exceeds template {W}x{H}")
+    qr = np.asarray(make_qr(link, box, s))     # black-on-white RGB
+    module = qr[:, :, 0] < 128                  # True where a (dark) QR module is
 
-    flat[y:y + s, x:x + s] = qr
-    if white_behind_qr:
-        # Paint the QR footprint into the white channel so black modules read on
-        # transparent/black materials. Spread (choke/trap) by white_bleed_px so
-        # the fill overlaps the template frame's own white and leaves no hairline
-        # un-inked ring at the anti-aliased window edge.
-        b = white_bleed_px
-        y0, y1 = max(0, y - b), min(H, y + s + b)
-        x0, x1 = max(0, x - b), min(W, x + s + b)
-        alpha[y0:y1, x0:x1] = 255
+    if qr_white:
+        # WHITE QR: modules are white ink (spot channel only); gaps are bare
+        # material. No colour ink and no solid white base in the window.
+        flat[y:y + s, x:x + s] = 255            # CMYK = 0 across the QR window
+        win = np.zeros((s, s), dtype=np.uint8)
+        win[module] = 255                       # white ink only on the modules
+        alpha[y:y + s, x:x + s] = win
+    else:
+        # BLACK QR: black colour modules on a solid white-ink base (with trap).
+        flat[y:y + s, x:x + s] = qr
+        if white_behind_qr:
+            b = white_bleed_px
+            y0, y1 = max(0, y - b), min(H, y + s + b)
+            x0, x1 = max(0, x - b), min(W, x + s + b)
+            alpha[y0:y1, x0:x1] = 255
 
     return Image.fromarray(flat, "RGB"), Image.fromarray(alpha, "L")

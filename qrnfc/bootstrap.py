@@ -29,7 +29,12 @@ DEFAULT_VARIANTS = {
                "page_w_pt": 297.600, "page_h_pt": 419.520},
 }
 
-DEFAULT_SETTINGS = {"spot_name": "Spot_Weiss", "overprint": True, "white_behind_qr": True}
+DEFAULT_SETTINGS = {
+    "spot_name": "Spot_Weiss",
+    "overprint": True,
+    "white_behind_qr": True,
+    "white_qr_colours": ["BLK", "HDF"],  # dark stock -> white QR (white ink)
+}
 
 
 def scaffold(root: str) -> list[str]:
