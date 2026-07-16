@@ -11,6 +11,7 @@ import shutil
 from typing import Callable, Optional
 
 from . import csv_parser, variants
+from .address_labels import Label, build_label_pdf
 from .config import AppConfig
 from .matching import address_matches
 from .models import LinkSource, Order
@@ -219,4 +220,35 @@ def run_batch(orders: list[Order], cfg: AppConfig, places, manual_cb,
                 order.log(f"render failed: {e}")
                 unresolved.append(order)
         progress_cb(i, total, order)
+
+    _generate_labels(orders, cfg)
     return unresolved
+
+
+def _generate_labels(orders: list[Order], cfg: AppConfig) -> None:
+    """For each multi-sign order that ships to more than one distinct address,
+    write a 10x15 cm label PDF (one page per sign) into output/labels/."""
+    from collections import OrderedDict
+    groups: "OrderedDict[str, list[Order]]" = OrderedDict()
+    for o in orders:
+        if o.group_prefix:                      # multi-sign only
+            groups.setdefault(o.order_number, []).append(o)
+
+    label_dir = os.path.join(cfg.output_root, "labels")
+    for rows in groups.values():
+        signs: list[tuple[int, Label]] = []
+        for o in rows:
+            for seq in o.sign_seqs:
+                signs.append((seq, Label(f"{o.group_prefix}{seq}", o.company, o.address)))
+        signs.sort(key=lambda s: s[0])
+        # only worth printing when the signs differ (different locations/companies)
+        distinct = {(lab.company, lab.address) for _, lab in signs}
+        if len(distinct) <= 1:
+            continue
+        os.makedirs(label_dir, exist_ok=True)
+        prefix = rows[0].group_prefix
+        out = os.path.join(label_dir, f"{prefix}_labels.pdf")
+        try:
+            build_label_pdf(out, [lab for _, lab in signs])
+        except Exception as e:                  # labels are a convenience, never fatal
+            rows[0].log(f"label sheet failed: {e}")

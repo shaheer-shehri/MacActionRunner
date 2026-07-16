@@ -7,6 +7,7 @@ import sys
 HIDDEN = [
     "googlemaps", "qrcode", "qrcode.image.pil",
     "requests", "openpyxl", "PIL", "PIL._tkinter_finder", "numpy", "pikepdf",
+    "reportlab", "reportlab.pdfgen", "reportlab.pdfbase.pdfmetrics",
 ]
 # Keep the binary lean: these are present in dev but the app never uses them.
 EXCLUDES = ["scipy", "matplotlib", "pandas", "pytest", "IPython", "notebook",
