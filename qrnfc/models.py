@@ -59,7 +59,12 @@ class Order:
     confidence: float = 0.0
     notes: list[str] = field(default_factory=list)
 
+    # multi-sign grouping: orders with >1 total sign get a letter prefix (A, B, …)
+    # and each sign a sequence number. item_quantity>1 expands to several signs.
+    group_prefix: Optional[str] = None      # None = single-sign order
+    sign_seqs: list[int] = field(default_factory=list)
     output_path: str = ""
+    output_paths: list[str] = field(default_factory=list)
 
     @property
     def is_resolved(self) -> bool:

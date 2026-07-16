@@ -53,18 +53,22 @@ def _extract_fields(order: Order, labels: dict) -> None:
         order.log("empty note")
         return
 
+    # Sign language (for the template) comes from the language line's value.
     lang = _detect_language(lines, labels)
     order.language = lang
     if lang is None:
         order.log("could not detect language")
-        return
 
-    field_labels = labels[lang]
-    # Build a flat lookup: normalized-label -> field name, plus ordered label set.
+    # Extract fields by matching labels from ALL languages: the note's label
+    # language can differ from the selected sign language (e.g. an "Englisch"
+    # order whose note still uses German labels). Longer labels first so a more
+    # specific label wins over a shorter prefix.
     label_to_field: list[tuple[str, str]] = []
-    for field, variants in field_labels.items():
-        for lab in variants:
-            label_to_field.append((lab.lower(), field))
+    for langset in labels.values():
+        for field, variants in langset.items():
+            for lab in variants:
+                label_to_field.append((lab.lower(), field))
+    label_to_field.sort(key=lambda lf: -len(lf[0]))
 
     values: dict[str, list[str]] = {}
     current_field: Optional[str] = None

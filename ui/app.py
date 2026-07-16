@@ -217,6 +217,8 @@ class App(tk.Tk):
         self.progress["value"] = i
         src = order.link_source.value
         out = os.path.basename(order.output_path) if order.output_path else ""
+        if len(order.output_paths) > 1:
+            out += f"  (+{len(order.output_paths) - 1} more)"
         iid = str(order.row_index)
         if self.tree.exists(iid):
             vals = list(self.tree.item(iid, "values"))
@@ -259,22 +261,45 @@ class App(tk.Tk):
 
 
 class ManualDialog(tk.Toplevel):
-    """Rare fallback: no unique Place ID could be resolved automatically."""
+    """Rare fallback: no unique Place ID could be resolved automatically.
+
+    Order number / company / address are shown in read-only fields so they can be
+    selected and copied (to pull up the order). The input accepts a bare Place ID
+    — the tool builds the review link from it — or a full review link.
+    """
 
     def __init__(self, master, order: Order):
         super().__init__(master)
-        self.title(f"Manual link — {order.company}")
+        self.title(f"Manual lookup — order {order.order_number}")
         self.result = ""
         self.resizable(False, False)
-        info = (f"No Place ID could be auto-resolved for order {order.order_number}.\n"
-                f"Company:  {order.company}\nAddress:  {order.address}\n\n"
-                f"Paste a Google review link, or leave blank to skip (stays unresolved):")
-        ttk.Label(self, text=info, justify="left").pack(anchor="w", padx=12, pady=10)
-        self.entry = ttk.Entry(self, width=76)
-        self.entry.pack(padx=12)
+
+        ttk.Label(self, text="No Place ID could be auto-resolved. Look it up and "
+                             "paste the Place ID (or a full review link) below.",
+                  justify="left").grid(row=0, column=0, columnspan=2, sticky="w",
+                                       padx=12, pady=(10, 8))
+
+        # Copyable order details (read-only entries)
+        for i, (label, value) in enumerate([
+            ("Order number", order.order_number),
+            ("Company", order.company),
+            ("Address", order.address),
+        ], start=1):
+            ttk.Label(self, text=label + ":").grid(row=i, column=0, sticky="e", padx=(12, 4))
+            var = tk.StringVar(value=value)
+            e = ttk.Entry(self, textvariable=var, width=64)
+            e.grid(row=i, column=1, sticky="w", padx=(0, 12), pady=1)
+            e.configure(state="readonly")
+
+        ttk.Label(self, text="Place ID / link:").grid(row=4, column=0, sticky="e",
+                                                      padx=(12, 4), pady=(8, 0))
+        self.entry = ttk.Entry(self, width=64)
+        self.entry.grid(row=4, column=1, sticky="w", padx=(0, 12), pady=(8, 0))
         self.entry.focus_set()
-        row = ttk.Frame(self); row.pack(pady=10)
-        ttk.Button(row, text="Use link", command=self._ok).pack(side="left", padx=4)
+
+        row = ttk.Frame(self)
+        row.grid(row=5, column=0, columnspan=2, pady=10)
+        ttk.Button(row, text="Use", command=self._ok).pack(side="left", padx=4)
         ttk.Button(row, text="Skip", command=self._skip).pack(side="left", padx=4)
         self.bind("<Return>", lambda _e: self._ok())
         self.grab_set()
