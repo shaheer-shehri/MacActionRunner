@@ -120,20 +120,13 @@ def render_order(order: Order, cfg: AppConfig) -> str:
     rgb, white = compose(tpl, order.final_link, layout.qr_box,
                          white_behind_qr=cfg.white_behind_qr, qr_white=qr_white)
 
-    # One row may yield several files: identical copies (item_quantity>1) share
-    # content, so render once and copy to the remaining names.
+    # One file per distinct sign; identical copies are covered by the quantity
+    # in the filename prefix (e.g. 2x), not by duplicate files.
     os.makedirs(cfg.output_root, exist_ok=True)
-    names = _out_names(order)
-    order.output_paths = []
-    first = os.path.join(cfg.output_root, names[0])
-    build_pdf(first, rgb, white, layout.page_w_pt, layout.page_h_pt)
-    order.output_paths.append(first)
-    for nm in names[1:]:
-        dst = os.path.join(cfg.output_root, nm)
-        shutil.copyfile(first, dst)
-        order.output_paths.append(dst)
-    order.output_path = first
-    return first
+    order.output_path = os.path.join(cfg.output_root, _out_name(order))
+    build_pdf(order.output_path, rgb, white, layout.page_w_pt, layout.page_h_pt)
+    order.output_paths = [order.output_path]
+    return order.output_path
 
 
 def _base_name(order: Order) -> str:
@@ -146,18 +139,22 @@ def _base_name(order: Order) -> str:
     return "".join(c for c in stem if c.isalnum() or c in "-_").strip("_")
 
 
-def _out_names(order: Order) -> list[str]:
-    """Filenames for an order's sign(s).
+def _out_name(order: Order) -> str:
+    """<prefix>_<lang>_<SKU>_<tracking>_<material>.pdf — prefix set by
+    _assign_sign_groups ("1x"/"2x" for identical signs, "A1"/"A2" when the order
+    needs genuinely different print files)."""
+    return f"{order.file_prefix}_{_base_name(order)}.pdf"
 
-    - single-sign order:  <qty>x_<base>.pdf   (e.g. 1x_DE_NFC_D02_WHT-A5_..._OAK.pdf)
-    - multi-sign order:   <Letter><seq>_<base>.pdf for each sign, marking that they
-      belong to one order (A1, A2, … / B1, B2 …). Covers both item_quantity>1
-      (identical) and several rows with the same order_number (different addresses).
-    """
-    base = _base_name(order)
-    if order.group_prefix:
-        return [f"{order.group_prefix}{seq}_{base}.pdf" for seq in order.sign_seqs]
-    return [f"{order.quantity}x_{base}.pdf"]
+
+def _sign_key(order: Order) -> tuple:
+    """Signs sharing this key need the SAME print file: same content (language,
+    company, address) AND same variant (SKU = shape/colour/size)."""
+    return (
+        (order.language or "").upper(),
+        " ".join((order.company or "").lower().split()),
+        " ".join((order.address or "").lower().split()),
+        (order.sku or "").upper(),
+    )
 
 
 def _letter_sequence():
@@ -174,28 +171,44 @@ def _letter_sequence():
 
 
 def _assign_sign_groups(orders: list[Order]) -> None:
-    """Group rows by order_number; orders with >1 total sign get a letter prefix
-    and each sign a sequence number (in CSV order). item_quantity expands a row
-    into that many signs."""
+    """Decide each row's filename prefix.
+
+    Rows are grouped by order_number, then bucketed by _sign_key (identical
+    content AND variant = one print file).
+
+    Case 1 — the order needs only ONE print file (all signs identical, however
+        many were ordered): quantity prefix only -> "1x" / "2x" / "3x".
+        Multiple NFC tags, identical content.
+    Case 2 — the order needs SEVERAL different print files (different address or
+        different variant): one letter for the order + a number per distinct file
+        -> "A1", "A2"… A file needed more than once also carries its quantity
+        (e.g. "A1_2x"). Multiple NFC tags, different content.
+    """
     from collections import OrderedDict
     groups: "OrderedDict[str, list[Order]]" = OrderedDict()
     for o in orders:
         groups.setdefault(o.order_number, []).append(o)
 
     letters = _letter_sequence()
-    prefix_of, counter = {}, {}
-    for onum, rows in groups.items():
-        total = sum(max(1, r.quantity) for r in rows)
-        prefix_of[onum] = next(letters) if total > 1 else None
-        counter[onum] = 0
+    for rows in groups.values():
+        buckets: "OrderedDict[tuple, list[Order]]" = OrderedDict()
+        for o in rows:
+            buckets.setdefault(_sign_key(o), []).append(o)
 
-    for o in orders:                       # CSV order -> sequence 1,2,3,…
-        o.group_prefix = prefix_of[o.order_number]
-        seqs = []
-        for _ in range(max(1, o.quantity)):
-            counter[o.order_number] += 1
-            seqs.append(counter[o.order_number])
-        o.sign_seqs = seqs
+        multi = len(buckets) > 1                    # Case 2 only when they differ
+        letter = next(letters) if multi else None
+        for n, bucket in enumerate(buckets.values(), start=1):
+            copies = sum(max(1, r.quantity) for r in bucket)
+            if multi:
+                prefix = f"{letter}{n}" + (f"_{copies}x" if copies > 1 else "")
+            else:
+                prefix = f"{copies}x"
+            for i, r in enumerate(bucket):
+                r.group_prefix = letter             # None for Case 1
+                r.sign_index = n if multi else 0
+                r.copies = copies
+                r.file_prefix = prefix
+                r.emits_file = (i == 0)             # duplicate rows merge into one file
 
 
 def run_batch(orders: list[Order], cfg: AppConfig, places, manual_cb,
@@ -205,6 +218,10 @@ def run_batch(orders: list[Order], cfg: AppConfig, places, manual_cb,
     total = len(orders)
     for i, order in enumerate(orders, 1):
         variants.decode_variant(order)
+        if not order.emits_file:      # identical duplicate row -> merged into one file
+            order.log(f"identical sign, merged into the {order.file_prefix} file")
+            progress_cb(i, total, order)
+            continue
         if order.variant is None:
             order.log("skipped: no variant")
             unresolved.append(order)
@@ -231,24 +248,23 @@ def _generate_labels(orders: list[Order], cfg: AppConfig) -> None:
     from collections import OrderedDict
     groups: "OrderedDict[str, list[Order]]" = OrderedDict()
     for o in orders:
-        if o.group_prefix:                      # multi-sign only
+        if o.group_prefix and o.emits_file:     # Case 2 only, one row per print file
             groups.setdefault(o.order_number, []).append(o)
 
     label_dir = os.path.join(cfg.output_root, "labels")
     for rows in groups.values():
-        signs: list[tuple[int, Label]] = []
-        for o in rows:
-            for seq in o.sign_seqs:
-                signs.append((seq, Label(f"{o.group_prefix}{seq}", o.company, o.address)))
-        signs.sort(key=lambda s: s[0])
-        # only worth printing when the signs differ (different locations/companies)
-        distinct = {(lab.company, lab.address) for _, lab in signs}
-        if len(distinct) <= 1:
+        rows = sorted(rows, key=lambda r: r.sign_index)
+        # only worth printing when the signs go to different locations/companies
+        if len({(r.company, r.address) for r in rows}) <= 1:
             continue
+        labels: list[Label] = []
+        for r in rows:
+            marker = f"{r.group_prefix}{r.sign_index}"
+            for _ in range(max(1, r.copies)):   # one label per physical sign
+                labels.append(Label(marker, r.company, r.address))
         os.makedirs(label_dir, exist_ok=True)
-        prefix = rows[0].group_prefix
-        out = os.path.join(label_dir, f"{prefix}_labels.pdf")
+        out = os.path.join(label_dir, f"{rows[0].group_prefix}_labels.pdf")
         try:
-            build_label_pdf(out, [lab for _, lab in signs])
+            build_label_pdf(out, labels)
         except Exception as e:                  # labels are a convenience, never fatal
             rows[0].log(f"label sheet failed: {e}")

@@ -53,6 +53,15 @@ def _fit(text: str, font: str, max_w: float, max_h: float,
     return min_size, _wrap(text, font, min_size, max_w)
 
 
+def _fit_one_line(text: str, font: str, max_w: float,
+                  max_size: float, min_size: float = 5) -> float:
+    """Largest font size that renders `text` on a SINGLE line within max_w."""
+    size = max_size
+    while size > min_size and stringWidth(text, font, size) > max_w:
+        size -= 0.5
+    return size
+
+
 def _draw_centered(c, lines, font, size, cx, top_y, leading=1.18):
     y = top_y
     for ln in lines:
@@ -62,7 +71,7 @@ def _draw_centered(c, lines, font, size, cx, top_y, leading=1.18):
     return y
 
 
-def _draw_label(c, W, H, label: Label):
+def _draw_label(c, W, H, label: Label, addr_size: float):
     margin = MARGIN_MM * mm
     cw = W - 2 * margin
     cx = W / 2
@@ -78,19 +87,27 @@ def _draw_label(c, W, H, label: Label):
     comp_bottom = _draw_centered(c, comp_lines, FONT_BOLD, comp_size, cx, comp_top,
                                  leading=1.15) if comp_lines else comp_top
 
-    # address: as large as possible, centered in the remaining space
+    # address: ONE line, sized down until it fits the label width (no line breaks),
+    # centered in the space left under the company name.
     addr_area_top = comp_bottom - 8 * mm
     addr_area_h = addr_area_top - margin
-    addr_size, addr_lines = _fit(label.address or "", FONT, cw, addr_area_h, max_size=64)
-    block_h = len(addr_lines) * addr_size * 1.18
-    start_y = margin + (addr_area_h + block_h) / 2 - addr_size
-    _draw_centered(c, addr_lines, FONT, addr_size, cx, start_y)
+    addr = " ".join((label.address or "").split())
+    if addr:
+        c.setFont(FONT, addr_size)
+        c.drawCentredString(cx, margin + (addr_area_h - addr_size) / 2, addr)
 
 
 def build_label_pdf(out_path: str, labels: list[Label]) -> None:
     W, H = PAGE_MM[0] * mm, PAGE_MM[1] * mm
+    cw = W - 2 * MARGIN_MM * mm
+    # One uniform address size for the whole set: the largest that keeps every
+    # address on a single line, so all labels of an order look consistent.
+    sizes = [_fit_one_line(" ".join(l.address.split()), FONT, cw, max_size=40)
+             for l in labels if l.address]
+    addr_size = min(sizes) if sizes else 40
+
     c = canvas.Canvas(out_path, pagesize=(W, H))
     for lab in labels:
-        _draw_label(c, W, H, lab)
+        _draw_label(c, W, H, lab, addr_size)
         c.showPage()
     c.save()

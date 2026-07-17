@@ -59,10 +59,17 @@ class Order:
     confidence: float = 0.0
     notes: list[str] = field(default_factory=list)
 
-    # multi-sign grouping: orders with >1 total sign get a letter prefix (A, B, …)
-    # and each sign a sequence number. item_quantity>1 expands to several signs.
-    group_prefix: Optional[str] = None      # None = single-sign order
-    sign_seqs: list[int] = field(default_factory=list)
+    # Filename prefix decision (see pipeline._assign_sign_groups):
+    #   Case 1 – every sign in the order is identical (same address AND variant):
+    #            one print file, quantity prefix -> "1x" / "2x" / "3x".
+    #   Case 2 – the order needs several DIFFERENT print files (different address
+    #            or variant): one letter per order + number per distinct file ->
+    #            "A1", "A2"… (plus its quantity if a file is needed more than once).
+    group_prefix: Optional[str] = None      # letter for Case 2; None for Case 1
+    sign_index: int = 0                     # 1..N within a Case-2 order
+    copies: int = 1                         # identical copies this file covers
+    file_prefix: str = ""                   # "1x" / "2x" / "A1" / "A2_2x"
+    emits_file: bool = True                 # False = duplicate row merged elsewhere
     output_path: str = ""
     output_paths: list[str] = field(default_factory=list)
 
