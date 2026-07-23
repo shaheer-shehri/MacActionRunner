@@ -1,12 +1,1 @@
-# Core
-pikepdf>=9          # spot-colour PDF assembly (installed: 10.3.0)
-Pillow>=10          # raster compositing
-qrcode>=7           # QR generation
-numpy>=1.26         # mask / image maths
-openpyxl>=3.1       # read config.xlsx
-requests>=2.31      # resolve share.google short links
-googlemaps>=4.10    # Google Places API client
-reportlab>=4        # 10x15 cm address label PDFs
-
-# Packaging (dev only)
-# pyinstaller>=6
+playwright>=1.48.0

@@ -1,0 +1,53 @@
+name: Build macOS app (Apple Silicon)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+  release:
+    types: [ created ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14          # Apple Silicon (M1) runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Sanity check (imports compile)
+        run: |
+          python -m py_compile tock_bot.py app.py
+
+      - name: Build .app
+        run: pyinstaller --noconfirm --clean TockReservationBot.spec
+
+      - name: Zip the .app
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            TockReservationBot.app TockReservationBot-macos-arm64.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TockReservationBot-macos-arm64
+          path: dist/TockReservationBot-macos-arm64.zip
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/TockReservationBot-macos-arm64.zip

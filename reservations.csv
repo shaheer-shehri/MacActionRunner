@@ -1,0 +1,4 @@
+restaurant,slug,city_slug,city,latlng,date,time_start,time_end,party_size,price,type,completed,notes
+Yardbird,yardbirdhongkong,hong-kong,Hong Kong,"22.3193039,114.1693611",2026-07-22,17:00,23:00,2,,DINE_IN_EXPERIENCES,,No price filter
+RORUBARU,,hong-kong,Hong Kong,"22.3193039,114.1693611",2026-07-22,19:00,22:00,4,$$,DINE_IN_EXPERIENCES,,Match name + only $$ places
+,,hong-kong,Hong Kong,"22.3193039,114.1693611",2026-07-22,18:00,22:00,2,$$$,DINE_IN_EXPERIENCES,,Any $$$ restaurant with a slot

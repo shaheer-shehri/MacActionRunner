@@ -1,9 +1,24 @@
-__pycache__/
-*.pyc
+# Saved Tock login session — contains auth cookies. NEVER commit.
+tock_session/
+
+# Secrets / local env
+.env
+*.env
+
+# Logs and run artifacts
+*.log
+hits.log
+booked_*.png
+stuck_*.png
+unverified_*.png
+error_booking.png
+
+# PyInstaller build output
 build/
 dist/
+*.manifest
+
+# Python
 .venv/
-venv/
-*.egg-info/
-.DS_Store
-*.spec.bak
+__pycache__/
+*.pyc

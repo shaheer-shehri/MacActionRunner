@@ -1,0 +1,44 @@
+{
+  "session_dir": "tock_session",
+  "targets_csv": "reservations.csv",
+
+  "mode": "auto_book",
+  "headless": false,
+
+  "poll_interval_seconds": 45,
+  "poll_jitter_seconds": 20,
+  "page_timeout_ms": 30000,
+
+  "stop_target_after_success": true,
+  "continuous": true,
+  "max_booking_attempts_per_target": 2,
+  "slot_search_anchors": 2,
+
+  "_comment_payment": "Card + password are NEVER stored here. Password = your saved browser session (run 'login'). Card = saved on your Tock account. CVC (only if a venue re-prompts) comes from the TOCK_CVC environment variable, never a file.",
+  "fill_cvc_if_prompted": true,
+
+  "checkout": {
+    "agree_cancellation_policy": true,
+    "agree_marketing_consent": false
+  },
+
+  "checkout_button_texts": [
+    "Continue",
+    "Checkout",
+    "Add to cart",
+    "Proceed to checkout"
+  ],
+  "confirm_button_texts": [
+    "Complete reservation",
+    "Place reservation",
+    "Confirm reservation",
+    "Book now",
+    "Pay now",
+    "Submit"
+  ],
+
+  "notify": {
+    "beep": true,
+    "webhook_url": ""
+  }
+}
