@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14          # Apple Silicon (M1) runner
+    runs-on: macos-14            # Apple Silicon (M-series) runner
     steps:
       - uses: actions/checkout@v4
 
@@ -26,28 +26,39 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Sanity check (imports compile)
-        run: |
-          python -m py_compile tock_bot.py app.py
+      - name: Sanity check (source compiles)
+        run: python -m compileall app run_app.py
+
+      - name: Regenerate Buy Boxes template (no real contacts)
+        run: python tools/make_template_workbook.py template/Master_Buyer_Buy_Boxes.xlsx
 
       - name: Build .app
-        run: pyinstaller --noconfirm --clean TockReservationBot.spec
+        run: pyinstaller --noconfirm --clean FloridaLandMachine.spec
 
-      - name: Zip the .app
+      - name: Assemble ready-to-use folder
+        run: |
+          STAGE="dist/Florida Land Machine"
+          mkdir -p "$STAGE/Input"
+          mv "dist/Florida Land Machine.app" "$STAGE/"
+          cp "QUICK START.txt" "$STAGE/"
+          # Placeholder so the empty Input folder survives zipping.
+          echo "Put each county's downloaded files in a subfolder here (e.g. Input/St Lucie/)." > "$STAGE/Input/READ ME - put county folders here.txt"
+
+      - name: Zip the app folder
         run: |
           cd dist
           ditto -c -k --sequesterRsrc --keepParent \
-            TockReservationBot.app TockReservationBot-macos-arm64.zip
+            "Florida Land Machine" "FloridaLandMachine-macos-arm64.zip"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TockReservationBot-macos-arm64
-          path: dist/TockReservationBot-macos-arm64.zip
+          name: FloridaLandMachine-macos-arm64
+          path: dist/FloridaLandMachine-macos-arm64.zip
           if-no-files-found: error
 
       - name: Attach to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/TockReservationBot-macos-arm64.zip
+          files: dist/FloridaLandMachine-macos-arm64.zip

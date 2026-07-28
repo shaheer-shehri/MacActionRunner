@@ -1,0 +1,104 @@
+====================================================================
+  FLORIDA LAND MACHINE  —  QUICK START
+====================================================================
+
+WHAT IT DOES
+------------
+Drop your latest Florida county assessor downloads into the Input folder,
+double-click the app, and it produces, for every county:
+
+  * a Vacant Land seller list,
+  * a Skip-Trace upload file (for XLeads),
+  * Builder Matches (every qualifying lot matched to every qualifying
+    builder, with a 1-5 star rating), and
+  * a Final Buyer List (the single best-rated builder for each lot).
+
+It also keeps growing Master files that combine every county you have
+processed.
+
+
+THE 3-STEP WORKFLOW
+-------------------
+1. DOWNLOAD the newest county files from the county's website.
+
+2. PLACE them in the Input folder, inside a folder named for the county:
+
+        Input/
+          Brevard/        <- put Brevard's files here
+          Indian River/   <- put Indian River's files here
+          St Lucie/       <- put St Lucie's files here
+          ...
+
+   Put the files the county gives you straight into that folder. You do not
+   need to rename them. (If a download is a .zip, unzip it first.)
+
+3. DOUBLE-CLICK  "Run Florida Land Machine.command".
+   The first run sets itself up (once); every run after is immediate.
+   When it finishes, open the Output folder.
+
+
+WHERE THE RESULTS GO
+--------------------
+   Output/
+     Vacant Land/           <County>_Vacant_Land.csv
+     Skip Trace Uploads/    <County>_XLeads_Upload.csv
+     Builder Matches/       <County>_Builder_Matches.csv
+     Final Buyers Lists/    <County>_Final_Buyer_List.csv
+     Master/                Master_Vacant_Land.csv, Master_Final_Buyer_List.csv
+                            (+ Archive/ timestamped snapshots)
+     _Run Reports/          a plain-text log of every run
+
+
+REFRESHING WITH NEW DATA
+------------------------
+Just replace the files in a county's Input folder with the newer download and
+run again. The app rebuilds that county from scratch, so lots that no longer
+qualify drop off and newly qualifying lots are added automatically.
+
+
+COUNTY FORMATS SUPPORTED OUT OF THE BOX
+---------------------------------------
+  * WebExport counties (e.g. Brevard, Indian River) — the WebExport_*.TXT files
+  * St Lucie CAMA — the folder of CSV tables (PropertyIdentification.csv, etc.)
+  * Volusia — the VACANT ... EXTRACT.csv file
+  * Lake — the NALExtractPublic_*.xlsx file
+  * Many other single-file assessor CSV/XLSX exports are auto-recognized.
+
+If a county's format is NOT recognized, the app SKIPS that county and writes a
+clear note in the run report telling you exactly what it found and what needs to
+be mapped — it will never guess and produce incorrect results. Send that note to
+your developer to have the new format added.
+
+
+ADDING / EDITING BUILDERS (NO CODE)
+-----------------------------------
+Open:  Builder Buy Boxes/Master_Buyer_Buy_Boxes.xlsx
+
+  * "Buy Boxes" sheet: one row per builder buying criterion. Edit County,
+    City/Area, ZIP Codes, Min/Max Acres, Price Min/Max, etc. Set "Active" to No
+    to switch a buy box off without deleting it.
+  * "Contacts" sheet: builder contact name / email / phone (added to matches).
+  * "Add New Buyer" sheet: scratch area — fill a row, then copy it into the
+    "Buy Boxes" sheet.
+
+Save the workbook and run the app again. No code changes needed, ever.
+
+
+HOW THE STAR RATING WORKS
+-------------------------
+A lot must first PASS the hard filters a builder specifies that county data can
+verify: County, City/Area or ZIP, and Acreage range. Among lots that pass:
+
+    5 stars = squarely in the middle of the buy box (ideal fit)
+    1 star  = qualifies, but sits near the edge of the criteria
+
+Things assessor data cannot confirm (water/septic, lot width/depth, road
+exclusions, off-market status) are NOT used to reject a lot — instead they are
+listed in the "Needs_Verification" column so you can check the top matches by
+hand before reaching out.
+
+
+NEED HELP?
+----------
+Send your developer the newest file from Output/_Run Reports/ — it contains
+everything about what the last run did.

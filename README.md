@@ -1,113 +1,71 @@
-# Tock Reservation Bot — macOS app
+# Florida Land Machine — macOS build
 
-A desktop app for **macOS (Apple Silicon / M1)** that monitors
-[exploretock.com](https://www.exploretock.com) for open tables matching your
-reservations and **books them automatically** using your own logged-in Tock session.
-It drives a real Chromium browser (Playwright), so it survives Tock's JavaScript app
-and anti-bot checks that block plain HTTP scrapers.
+This repository builds **Florida Land Machine**, a double-click macOS app that turns
+Florida county assessor downloads into vacant-land seller lists, skip-trace upload
+files, and builder-matched buyer lists with a 1–5 star rating.
 
-> **Security:** the app never stores your password or card. You log in once by hand
-> into a saved browser profile, and Tock keeps your card on file. The bot uses the
-> card on your account — it never types card numbers.
+GitHub's macOS runner compiles a **self-contained `.app`** (Python, pandas and
+openpyxl embedded), so the end user needs nothing installed.
 
 ---
 
-## Get the app
+## Download the built app
 
-- **GitHub Actions build:** every push to `main` builds the `.app` on an Apple-Silicon
-  runner. Download it from the run's **Artifacts** (`TockReservationBot-macos-arm64.zip`),
-  or from a **Release** if one is published.
-- Unzip → you get `TockReservationBot.app`.
+1. Open the **[Actions](../../actions)** tab.
+2. Click the most recent **"Build macOS app (Apple Silicon)"** run.
+3. Download the **`FloridaLandMachine-macos-arm64`** artifact and unzip it.
+
+You get a folder **`Florida Land Machine`** containing:
+
+```
+Florida Land Machine/
+  Florida Land Machine.app     <- double-click this
+  Input/                       <- put county folders here
+  QUICK START.txt
+```
 
 ### First launch (Gatekeeper)
-The app is **unsigned** (no Apple Developer account), so macOS will warn on first open:
-- Right-click the app → **Open** → **Open** again, **or**
-- Run once in Terminal: `xattr -dr com.apple.quarantine /path/to/TockReservationBot.app`
+Because the app is not code-signed, the first time you open it macOS will warn you.
+**Right-click the app → Open → Open.** After that, a normal double-click works.
 
-On first run it downloads Chromium (~150 MB) into `~/.cache/ms-playwright` — needs
-internet once. All app data lives in
-`~/Library/Application Support/TockReservationBot/` (config, reservations, saved
-session, logs, screenshots).
+The app builds for **Apple Silicon (arm64)**. On Intel Macs it runs under Rosetta 2.
 
 ---
 
-## Using the app
+## How to use it
 
-1. **Login / Add card** — opens a browser. Sign in to Tock, and add a payment card
-   (**Profile → Payment methods**). Tock needs a card on file to finalize a
-   reservation — *even free ones*. Then click **Finish login** to save the session.
-2. **Edit your reservations** in the table (double-click a cell to edit). Columns:
+1. Put each county's downloaded files in a folder inside **`Input/`**
+   (e.g. `Input/St Lucie/`, `Input/Indian River/`). Unzip any `.zip` downloads first.
+2. Double-click **Florida Land Machine.app** and click **Run**. A live log shows
+   progress; large counties take a few minutes.
+3. When it finishes it opens the **`Output/`** folder next to the app:
+   `Vacant Land`, `Skip Trace Uploads`, `Builder Matches`, `Final Buyers Lists`,
+   `Master`, and `_Run Reports`.
 
-   | column | required | meaning |
-   |---|---|---|
-   | `restaurant` | optional | name to match; **blank = any restaurant** |
-   | `slug` | optional | exact Tock slug (e.g. `yardbirdhongkong`); most reliable |
-   | `city_slug` | ✅ | from a Tock search URL `…/city/<city_slug>/search` |
-   | `city` | ✅ | e.g. `Hong Kong` |
-   | `latlng` | ✅ | e.g. `22.3193039,114.1693611` |
-   | `date` | ✅ | `2026-08-14` |
-   | `time_start` / `time_end` | ✅ | acceptable time window |
-   | `party_size` | ✅ | guests |
-   | `price` | optional | `$`–`$$$$` (Tock price filter); blank = any |
-   | `type` | optional | defaults to `DINE_IN_EXPERIENCES` |
-   | `completed` | auto | `yes` = booked/skip; set automatically after a booking |
-   | `notes` | optional | your notes |
+### Builders / buy boxes
+On first launch the app drops a **`Builder Buy Boxes/Master_Buyer_Buy_Boxes.xlsx`**
+starter next to itself (from a sanitized template). Replace the example rows with
+your real builders — no code changes needed. **Keep your real workbook local; it is
+not stored in this public repo.**
 
-   Get `city_slug`, `city`, `latlng` by searching your city on Tock once and copying
-   them out of the result URL.
-3. **▶ Start** — begins monitoring. When a slot in your window appears, it books it,
-   then marks that row **completed** so it won't book it again.
-4. **■ Stop** — stops monitoring.
-
-The **completed** column is the key to "don't book the same thing twice": completed
-rows are skipped on start, and a row flips to completed automatically once booked.
-Double-click a `completed` cell (or **Toggle completed**) to change it manually.
-
-Everything the bot does is shown in the **Activity log** and saved to
-`tock_bot.log`. On a booking you get a `booked_*.png` screenshot; if a checkout can't
-be verified you get `unverified_*.png` and a clear warning to check your account.
+Unrecognized county formats are skipped with a clear note in the run report saying
+what to map — the app never guesses.
 
 ---
 
-## Command-line use (optional)
+## How the build works
 
-The engine also runs headless from a terminal:
+| File | Purpose |
+|------|---------|
+| `run_app.py` | App entry point (launches the desktop window) |
+| `app/` | All logic: format detection, county parsers, vacant filter, buyer matching/scoring, outputs |
+| `app/gui.py` | The Tkinter window (Run button + live log) |
+| `FloridaLandMachine.spec` | PyInstaller recipe (arm64, windowed, bundles pandas/openpyxl + template) |
+| `tools/make_template_workbook.py` | Regenerates the sanitized (no-PII) Buy Boxes template |
+| `template/Master_Buyer_Buy_Boxes.xlsx` | Sanitized starter workbook bundled into the app |
+| `.github/workflows/build-macos.yml` | Builds, zips, and uploads the app on every push to `main` |
 
-```bash
-pip install -r requirements.txt
-python -m playwright install chromium
-python tock_bot.py login     # sign in once (+ add a card on your account)
-python tock_bot.py check     # dry run: report availability, book nothing
-python tock_bot.py run        # monitor + auto-book
-```
+To cut a downloadable **Release**, create a GitHub Release — the workflow attaches
+the zip automatically.
 
-Config is `config.json`; reservations are `reservations.csv` (same columns as the
-table). Key settings: `mode` (`auto_book`/`notify`), `poll_interval_seconds`,
-`continuous` (keep trying until booked), `slot_search_anchors`, and
-`checkout.agree_marketing_consent` (off by default).
-
-### CVC re-prompt
-Some venues re-ask for the card's CVC at checkout. Provide it for the session via an
-env var — never stored in a file:
-```bash
-export TOCK_CVC=123
-```
-
----
-
-## Build it yourself
-
-CI does this automatically (`.github/workflows/build-macos.yml` on `macos-14`). To
-build locally on an Apple-Silicon Mac:
-
-```bash
-pip install -r requirements.txt pyinstaller
-python -m playwright install chromium      # for local testing
-pyinstaller --noconfirm --clean TockReservationBot.spec
-open dist/TockReservationBot.app
-```
-
-## Notes & etiquette
-- Keep `poll_interval_seconds` reasonable (30–60s) — don't hammer Tock.
-- This automates **your own** account for **your own** party. Tock's Terms prohibit
-  reselling/scalping reservations.
+Adding a new county format: see `app/parsers/HOW_TO_ADD_A_COUNTY.md`.

@@ -1,24 +1,25 @@
-# Saved Tock login session — contains auth cookies. NEVER commit.
-tock_session/
-
-# Secrets / local env
-.env
-*.env
-
-# Logs and run artifacts
-*.log
-hits.log
-booked_*.png
-stuck_*.png
-unverified_*.png
-error_booking.png
-
 # PyInstaller build output
 build/
 dist/
 *.manifest
+*.spec.bak
 
 # Python
 .venv/
+env/
 __pycache__/
 *.pyc
+
+# NEVER commit real business data to this PUBLIC repo.
+# (The sanitized template/ workbook IS committed on purpose.)
+Input/
+Output/
+Builder Buy Boxes/
+/Master_Buyer_Buy_Boxes.xlsx
+*.command
+# ...but the sanitized template IS tracked:
+!template/Master_Buyer_Buy_Boxes.xlsx
+
+# OS junk
+.DS_Store
+__MACOSX/
