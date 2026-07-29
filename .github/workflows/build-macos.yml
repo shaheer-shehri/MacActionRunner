@@ -1,4 +1,4 @@
-name: Build macOS app (Apple Silicon)
+name: Build macOS app (Intel x86_64)
 
 on:
   push:
@@ -12,7 +12,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14            # Apple Silicon (M-series) runner
+    runs-on: macos-13            # Intel runner -> runs on Intel Macs natively
+                                 # and on Apple Silicon via Rosetta 2.
     steps:
       - uses: actions/checkout@v4
 
@@ -41,24 +42,29 @@ jobs:
           mkdir -p "$STAGE/Input"
           mv "dist/Florida Land Machine.app" "$STAGE/"
           cp "QUICK START.txt" "$STAGE/"
+          # Executable double-click launcher (de-quarantines + opens the app).
+          cp "launcher/Run Florida Land Machine.command" "$STAGE/"
+          chmod +x "$STAGE/Run Florida Land Machine.command"
+          # Make the app's inner binary executable too (belt and suspenders).
+          chmod +x "$STAGE/Florida Land Machine.app/Contents/MacOS/"* || true
           # Placeholder so the empty Input folder survives zipping.
           echo "Put each county's downloaded files in a subfolder here (e.g. Input/St Lucie/)." > "$STAGE/Input/READ ME - put county folders here.txt"
 
-      - name: Zip the app folder
+      - name: Zip the app folder (preserves permissions)
         run: |
           cd dist
           ditto -c -k --sequesterRsrc --keepParent \
-            "Florida Land Machine" "FloridaLandMachine-macos-arm64.zip"
+            "Florida Land Machine" "FloridaLandMachine-macos-x86_64.zip"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FloridaLandMachine-macos-arm64
-          path: dist/FloridaLandMachine-macos-arm64.zip
+          name: FloridaLandMachine-macos-x86_64
+          path: dist/FloridaLandMachine-macos-x86_64.zip
           if-no-files-found: error
 
       - name: Attach to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/FloridaLandMachine-macos-arm64.zip
+          files: dist/FloridaLandMachine-macos-x86_64.zip

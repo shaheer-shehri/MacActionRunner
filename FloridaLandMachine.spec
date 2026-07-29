@@ -1,5 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for the Florida Land Machine macOS app (Apple Silicon / arm64).
+# PyInstaller spec for the Florida Land Machine macOS app (Intel / x86_64).
+#
+# Built on an Intel runner so it runs natively on Intel Macs (e.g. 2018 MacBook
+# Air) AND on Apple Silicon Macs via Rosetta 2 — i.e. it runs on every Mac.
 #
 # Produces a self-contained "Florida Land Machine.app" with Python + pandas +
 # openpyxl embedded, so the end user needs nothing installed. The Buy Boxes
@@ -47,7 +50,7 @@ exe = EXE(
     upx=False,
     console=False,            # windowed GUI app (no terminal)
     disable_windowed_traceback=False,
-    target_arch='arm64',      # Apple Silicon (M-series)
+    target_arch='x86_64',     # Intel (runs on Intel natively + Apple Silicon via Rosetta)
     codesign_identity=None,
     entitlements_file=None,
 )
@@ -69,7 +72,7 @@ app = BUNDLE(
     info_plist={
         'LSMinimumSystemVersion': '11.0',
         'NSHighResolutionCapable': True,
-        'CFBundleShortVersionString': '1.0.0',
-        'CFBundleVersion': '1.0.0',
+        'CFBundleShortVersionString': '1.0.1',
+        'CFBundleVersion': '1.0.1',
     },
 )

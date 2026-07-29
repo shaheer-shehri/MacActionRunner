@@ -32,9 +32,29 @@ THE 3-STEP WORKFLOW
    Put the files the county gives you straight into that folder. You do not
    need to rename them. (If a download is a .zip, unzip it first.)
 
-3. DOUBLE-CLICK  "Run Florida Land Machine.command".
-   The first run sets itself up (once); every run after is immediate.
-   When it finishes, open the Output folder.
+3. START THE APP by double-clicking  "Run Florida Land Machine.command".
+
+   FIRST TIME ONLY: macOS may say it is "from an unidentified developer".
+   -> RIGHT-CLICK "Run Florida Land Machine.command" -> Open -> Open.
+   (This is only needed once. After that a normal double-click works.)
+
+   The app window opens; click "Run". When it finishes it shows the results
+   and can open the Output folder for you.
+
+   Keep the launcher and the app together in the same folder.
+
+
+IF IT STILL WON'T OPEN ("access privileges" / "cannot be opened")
+-----------------------------------------------------------------
+This happens when the download loses its permissions. Fix it once:
+Open the Terminal app, type  cd    then a SPACE, drag this folder onto the
+Terminal window, press Return, then paste these two lines:
+
+    chmod +x "Run Florida Land Machine.command"
+    xattr -dr com.apple.quarantine "Florida Land Machine.app"
+
+Then double-click the launcher again. (This app is built for Intel Macs and
+also runs on Apple Silicon.)
 
 
 WHERE THE RESULTS GO
