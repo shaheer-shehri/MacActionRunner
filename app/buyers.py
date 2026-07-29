@@ -32,21 +32,63 @@ from .utils import clean, to_number
 # ---------------------------------------------------------------------------
 # Loading the workbook
 # ---------------------------------------------------------------------------
+_ACTIVE_TRUE = {"", "YES", "Y", "TRUE", "1", "ACTIVE"}
+_RECOMMENDED_COLUMNS = ["Builder", "County", "City/Area", "ZIP Codes", "Min Acres", "Max Acres"]
+
+
+def _read_buy_box_sheet(workbook: Path) -> tuple[pd.DataFrame, str]:
+    """
+    Read the buy-box sheet as strings. Tries the 'Buy Boxes' sheet first, then
+    the sheet whose header most looks like buy boxes, then the first sheet.
+    Explicitly uses the openpyxl engine (required inside the packaged app).
+    Raises on genuine read failure.
+    """
+    xls = pd.ExcelFile(workbook, engine="openpyxl")
+    names = xls.sheet_names
+    preferred = next((s for s in names if s.strip().lower() in {"buy boxes", "buyboxes", "buy box"}), None)
+    order = ([preferred] if preferred else []) + [s for s in names if s != preferred]
+    best: tuple[pd.DataFrame, str] | None = None
+    for sheet in order:
+        df = pd.read_excel(xls, sheet_name=sheet, dtype=str)
+        df.columns = [str(c).strip() for c in df.columns]
+        if "Builder" in df.columns or "Buyer" in df.columns:
+            return df, sheet
+        if best is None:
+            best = (df, sheet)
+    if best is None:
+        raise RuntimeError("workbook has no readable sheets")
+    return best
+
+
+def inspect_workbook(workbook: Path) -> dict:
+    """Return facts about the workbook for diagnostics (never raises)."""
+    info = {"error": None, "sheet": None, "rows": 0, "active": 0, "missing_columns": []}
+    try:
+        df, sheet = _read_buy_box_sheet(workbook)
+    except Exception as exc:  # noqa: BLE001
+        info["error"] = str(exc)
+        return info
+    info["sheet"] = sheet
+    info["rows"] = len(df)
+    if "Active" in df.columns:
+        active = df["Active"].fillna("").astype(str).str.strip().str.upper()
+        info["active"] = int(active.isin(_ACTIVE_TRUE).sum())
+    else:
+        info["active"] = len(df)  # no Active column -> treat all as active
+    info["missing_columns"] = [c for c in _RECOMMENDED_COLUMNS if c not in df.columns]
+    return info
+
+
 def load_buy_boxes(workbook: Path) -> pd.DataFrame:
     if not workbook.exists():
         return pd.DataFrame()
     try:
-        df = pd.read_excel(workbook, sheet_name="Buy Boxes", dtype=str)
+        df, _ = _read_buy_box_sheet(workbook)
     except Exception:
-        try:
-            df = pd.read_excel(workbook, dtype=str)
-        except Exception:
-            return pd.DataFrame()
-    df.columns = [str(c).strip() for c in df.columns]
-    # Keep only active rows if an Active column is present.
+        return pd.DataFrame()
     if "Active" in df.columns:
         active = df["Active"].fillna("").astype(str).str.strip().str.upper()
-        df = df[active.isin({"", "YES", "Y", "TRUE", "1", "ACTIVE"})]
+        df = df[active.isin(_ACTIVE_TRUE)]
     return df.reset_index(drop=True)
 
 

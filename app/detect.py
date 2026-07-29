@@ -12,7 +12,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .parsers import webexport, stlucie_cama, volusia_extract, lake_nal, generic
+from .parsers import (
+    webexport, stlucie_cama, volusia_extract, lake_nal,
+    seminole, polk, orange_nal, generic,
+)
 from .utils import read_delimited
 
 # Priority order: specific fingerprinted formats first, generic last.
@@ -21,6 +24,9 @@ PARSERS = [
     stlucie_cama,    # St Lucie CAMA multi-CSV
     volusia_extract, # Volusia *_VACANT_*_EXTRACT.csv
     lake_nal,        # Lake NAL XLSX
+    seminole,        # Seminole Parcels.csv
+    polk,            # Polk FTP CAMA (ftp_parcel/owner/sales)
+    orange_nal,      # Orange NAL (vw_nalf pipe-delimited)
     generic,         # best-effort single headered file (last resort)
 ]
 

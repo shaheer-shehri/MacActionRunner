@@ -18,8 +18,9 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import detect, vacant_filter, buyers, outputs
+from . import detect, vacant_filter, buyers, outputs, extract
 from .report import RunReport
+from .diagnostics import Diagnostics
 from .utils import finalize_standard, blank_standard_frame
 
 
@@ -50,29 +51,58 @@ def bundled_resource(name: str) -> Path:
     return Path(__file__).resolve().parent.parent / name
 
 
-def process_county(det: detect.Detection, report: RunReport):
-    """Return (vacant_df, matrix, final) or None if skipped."""
-    report.header(f"COUNTY: {det.county}")
+def process_county(folder, report: RunReport, diag: Diagnostics):
+    """Extract archives, detect, parse and vacant-filter one county folder.
+    Returns (county_name, vacant_df) or (county_name, None) if skipped."""
+    county = folder.name
+    report.header(f"COUNTY: {county}")
 
+    # 1) Auto-unzip any archives so the operator never has to.
+    arch = extract.extract_all(folder, log=report.log)
+    for name in arch["unzipped"]:
+        report.log(f"Unzipped        : {name}")
+    for name, err in arch["failed"]:
+        report.log(f"  ! could not unzip {name}: {err}")
+    if arch["access_db"]:
+        msg = (f"{county}: Microsoft Access file(s) {arch['access_db']} cannot be read on "
+               f"Mac. Export to CSV/TXT first.")
+        report.log("  ! " + msg)
+        diag.fail(msg)
+
+    # 2) Detect format.
+    det = detect.detect(county, folder)
     if det.parser is None:
         report.log(det.reason)
-        report.county_skipped(det.county, det.reason)
-        return None
+        report.county_skipped(county, det.reason)
+        if det.format_name == "EMPTY":
+            if not arch["access_db"]:
+                diag.fail(f"{county}: no readable data files found (missing input files).")
+        else:
+            diag.fail(f"{county}: unsupported county format — needs a mapping.")
+        return county, None
 
     report.log(f"Format detected : {det.format_name}")
     report.log(f"Input files     : {len(det.files)}")
 
+    # 3) Parse.
     try:
         parsed = det.parser.parse(det.folder, det.files)
     except Exception as exc:  # noqa: BLE001
         reason = f"Parser error: {exc}"
         report.log("  ! " + reason)
-        report.county_skipped(det.county, reason)
-        return None
+        report.county_skipped(county, reason)
+        diag.fail(f"{county}: processing stopped by an unexpected error while reading files: {exc}")
+        return county, None
 
-    normalized = finalize_standard(parsed, det.county)
-    report.log(f"Parcels parsed  : {len(normalized):,}")
+    raw_rows = len(parsed)
+    normalized = finalize_standard(parsed, county)
+    duplicates = raw_rows - len(normalized)
+    report.log(f"Parcels parsed  : {len(normalized):,}"
+               + (f"  ({duplicates:,} duplicate parcel IDs collapsed)" if duplicates > 0 else ""))
+    if duplicates > 0:
+        diag.warn(f"{county}: {duplicates:,} duplicate parcel ID(s) found and collapsed to one row each.")
 
+    # 4) Vacant filter.
     vacant, stats = vacant_filter.apply(normalized)
     report.log(f"Vacant filter   : {stats['input']:,} -> vacant {stats.get('after_vacant', 0):,} "
                f"-> acreage {stats.get('after_acreage', 0):,} -> non-gov {stats.get('after_owner', 0):,}")
@@ -80,11 +110,13 @@ def process_county(det: detect.Detection, report: RunReport):
     if vacant.empty:
         reason = "No vacant residential parcels qualified after filtering."
         report.log("  ! " + reason)
-        report.county_skipped(det.county, reason)
-        return None
+        report.county_skipped(county, reason)
+        diag.fail(f"{county}: no vacant parcels matched after filtering.")
+        return county, None
 
-    report.county_ok(det.county)
-    return vacant
+    report.county_ok(county)
+    diag.ok(f"{county}: {len(vacant):,} vacant residential parcel(s) ({det.format_name}).")
+    return county, vacant
 
 
 def run(sink=None) -> int:
@@ -94,37 +126,64 @@ def run(sink=None) -> int:
     workbook = root / "Builder Buy Boxes" / "Master_Buyer_Buy_Boxes.xlsx"
 
     report = RunReport(sink=sink)
+    diag = Diagnostics("RUN DIAGNOSTICS")
     report.header("FLORIDA LAND MACHINE")
     report.log(f"Input folder  : {input_root}")
     report.log(f"Output folder : {output_root}")
     report.log(f"Buy boxes     : {workbook}  ({'found' if workbook.exists() else 'MISSING'})")
 
+    paths = outputs.OutputPaths(output_root)
+
     if not input_root.exists():
         report.log("\nERROR: Input folder is missing. Create it and drop county folders inside.")
+        diag.fail("Input folder is missing. Create an 'Input' folder next to the app.")
+        report.log(f"\nDiagnostics saved: {diag.save(paths.reports)}")
         return 1
+
+    # --- Buy Box workbook diagnostics ---
+    if not workbook.exists():
+        diag.fail("Builder Buy Box workbook not found. Put 'Master_Buyer_Buy_Boxes.xlsx' "
+                  "in the 'Builder Buy Boxes' folder.")
+    else:
+        info = buyers.inspect_workbook(workbook)
+        if info["error"]:
+            diag.fail(f"Builder Buy Box workbook could not be read: {info['error']}")
+        else:
+            diag.ok(f"Buy Box file loaded successfully ({info['rows']} row(s), sheet '{info['sheet']}').")
+            if info["active"] == 0:
+                diag.fail("No active builders found. Set 'Active' to Yes on your rows, or "
+                          "replace the template with your real workbook.")
+            else:
+                diag.ok(f"{info['active']} active builder buy box(es) loaded.")
+            if info["missing_columns"]:
+                diag.warn("Buy Box missing recommended column(s): " + ", ".join(info["missing_columns"]))
+
+    buy_boxes = buyers.load_buy_boxes(workbook)
+    contacts = buyers.load_contacts(workbook)
+    report.log(f"Active buy boxes loaded: {len(buy_boxes)}")
 
     county_dirs = sorted(d for d in input_root.iterdir()
                          if d.is_dir() and not d.name.startswith((".", "_")))
     if not county_dirs:
         report.log("\nNothing to do: no county folders found in Input/.")
         report.log("Drop one folder per county (e.g. Input/Brevard/...) and run again.")
+        diag.fail("No county folders found in Input. Drop one folder per county.")
+        report.summary()
+        report.log(f"\nRun report saved: {report.save(paths.reports)}")
+        report.log(f"Diagnostics saved: {diag.save(paths.reports)}")
         return 0
 
-    paths = outputs.OutputPaths(output_root)
-    buy_boxes = buyers.load_buy_boxes(workbook)
-    contacts = buyers.load_contacts(workbook)
-    report.log(f"Active buy boxes loaded: {len(buy_boxes)}")
+    diag.ok(f"{len(county_dirs)} county folder(s) detected.")
 
     any_ok = False
     for folder in county_dirs:
-        det = detect.detect(folder.name, folder)
-        vacant = process_county(det, report)
+        county, vacant = process_county(folder, report, diag)
         if vacant is None:
             continue
         any_ok = True
 
         matrix, final = buyers.match(vacant, buy_boxes, contacts)
-        written = outputs.write_county(paths, det.county, vacant, matrix, final)
+        written = outputs.write_county(paths, county, vacant, matrix, final)
 
         report.log(f"Vacant list     : {written['vacant'].name}  ({len(vacant):,} rows)")
         report.log(f"Skip-trace CSV  : {written['skip'].name}")
@@ -133,7 +192,9 @@ def run(sink=None) -> int:
             report.log(f"Builder matches : {len(matrix):,} pairs across {builders_hit} builders")
             report.log(f"Final buyer list: {len(final):,} properties (best builder each)")
         else:
-            report.log("Builder matches : 0 (no buy box qualified for this county)")
+            report.log("Builder matches : 0 (no active buy box targets this county)")
+            if not buy_boxes.empty:
+                diag.info(f"{county}: 0 builder matches (no active buy box targets this county).")
 
     if any_ok:
         counts = outputs.rebuild_master(paths)
@@ -143,7 +204,11 @@ def run(sink=None) -> int:
 
     report.summary()
     saved = report.save(paths.reports)
+    diag_path = diag.save(paths.reports)
     report.log(f"\nRun report saved: {saved}")
+    report.log(f"Diagnostics saved: {diag_path}")
+    report.log("")
+    report.log(diag.render())
     return 0
 
 

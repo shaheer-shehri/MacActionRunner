@@ -98,6 +98,8 @@ class App(ttk.Frame):
                    command=lambda: _open_folder(self.root_dir / "Builder Buy Boxes")).pack(side="left")
         self.run_btn = ttk.Button(btns, text="▶  Run", command=self._start)
         self.run_btn.pack(side="right")
+        self.diag_btn = ttk.Button(btns, text="Diagnostics", command=self._diagnostics)
+        self.diag_btn.pack(side="right", padx=6)
 
         self.progress = ttk.Progressbar(self, mode="indeterminate")
         self.progress.pack(fill="x", pady=(0, 8))
@@ -147,6 +149,37 @@ class App(ttk.Frame):
             self._sink(f"\nERROR: {exc}")
             code = 1
         self.after(0, lambda: self._finish(code))
+
+    # -- diagnostics (quick check, no full processing) ---------------------
+    def _diagnostics(self) -> None:
+        if self.worker and self.worker.is_alive():
+            return
+        self.log.configure(state="normal")
+        self.log.delete("1.0", "end")
+        self.log.configure(state="disabled")
+        self.diag_btn.configure(state="disabled")
+        self.status.configure(text="Running diagnostics...", foreground="#a06000")
+
+        def work() -> None:
+            from . import diagnostics
+            try:
+                scaffold(self.root_dir)
+                diag = diagnostics.preflight(self.root_dir)
+                self._sink(diag.render())
+                try:
+                    saved = diag.save(self.root_dir / "Output" / "_Run Reports")
+                    self._sink(f"\nDiagnostics saved: {saved}")
+                except Exception:  # noqa: BLE001
+                    pass
+            except Exception as exc:  # noqa: BLE001
+                self._sink(f"\nDiagnostics error: {exc}")
+            self.after(0, self._finish_diag)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _finish_diag(self) -> None:
+        self.diag_btn.configure(state="normal")
+        self.status.configure(text="Diagnostics complete.", foreground="#357a38")
 
     def _finish(self, code: int) -> None:
         self.progress.stop()

@@ -29,8 +29,9 @@ THE 3-STEP WORKFLOW
           St Lucie/       <- put St Lucie's files here
           ...
 
-   Put the files the county gives you straight into that folder. You do not
-   need to rename them. (If a download is a .zip, unzip it first.)
+   Put the files the county gives you straight into that folder. You do NOT
+   need to rename, unzip, or reorganize anything — the app automatically
+   unzips .zip downloads (even nested folders) for you.
 
 3. START THE APP by double-clicking  "Run Florida Land Machine.command".
 
@@ -78,16 +79,40 @@ qualify drop off and newly qualifying lots are added automatically.
 
 COUNTY FORMATS SUPPORTED OUT OF THE BOX
 ---------------------------------------
-  * WebExport counties (e.g. Brevard, Indian River) — the WebExport_*.TXT files
+  * WebExport counties (e.g. Indian River) — the WebExport_*.TXT files
   * St Lucie CAMA — the folder of CSV tables (PropertyIdentification.csv, etc.)
   * Volusia — the VACANT ... EXTRACT.csv file
   * Lake — the NALExtractPublic_*.xlsx file
+  * Seminole — the Parcels.csv export
+  * Polk — the FTP CAMA files (ftp_parcel/owner/sales)
+  * Orange — the certified NAL file (vw_nalf*.csv)
   * Many other single-file assessor CSV/XLSX exports are auto-recognized.
+  * .zip downloads are unzipped automatically — just drop them in.
+
+BREVARD NOTE: Brevard is downloaded as a Microsoft Access (.accdb) database,
+which cannot be read on a Mac. Open it in Access (or ask the county) and export
+the tables to CSV/TXT, then drop those in Input/Brevard/. The app will tell you
+this in the diagnostics if it sees an .accdb file.
 
 If a county's format is NOT recognized, the app SKIPS that county and writes a
-clear note in the run report telling you exactly what it found and what needs to
-be mapped — it will never guess and produce incorrect results. Send that note to
-your developer to have the new format added.
+clear note in the run report and diagnostics telling you exactly what it found
+and what needs to be mapped — it will never guess and produce incorrect results.
+Send that note to your developer to have the new format added.
+
+
+DIAGNOSTICS (WHAT WENT RIGHT / WRONG, IN PLAIN ENGLISH)
+-------------------------------------------------------
+Every run writes  Output/_Run Reports/Diagnostics_<date>.txt  with simple
+lines like:
+
+    ✅ Buy Box file loaded successfully (15 rows).
+    ✅ 15 active builder buy box(es) loaded.
+    ✅ St Lucie: 19,555 vacant residential parcel(s).
+    ❌ Brevard: Microsoft Access (.accdb) cannot be read on Mac. Export to CSV.
+
+You can also click the "Diagnostics" button any time for an instant check
+(without processing) of your workbook and county folders. If anything shows a
+red ❌, send that file to your developer and they'll know exactly what to fix.
 
 
 ADDING / EDITING BUILDERS (NO CODE)
