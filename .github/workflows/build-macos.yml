@@ -12,14 +12,24 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-13            # Intel runner -> runs on Intel Macs natively
-                                 # and on Apple Silicon via Rosetta 2.
+    # Use the FAST, always-available Apple Silicon runner (macos-13 Intel
+    # runners are being retired and queue for a long time), but build an
+    # INTEL x86_64 app on it by running an Intel Python under Rosetta 2. The
+    # result runs on Intel Macs natively and on Apple Silicon via Rosetta.
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+
+      - name: Ensure Rosetta 2 is available
+        run: softwareupdate --install-rosetta --agree-to-license || true
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          architecture: x64          # Intel Python (runs under Rosetta)
+
+      - name: Confirm interpreter is Intel x86_64
+        run: python -c "import platform, sys; print('machine:', platform.machine()); assert platform.machine() == 'x86_64', 'Expected x86_64 Python'"
 
       - name: Install dependencies
         run: |
