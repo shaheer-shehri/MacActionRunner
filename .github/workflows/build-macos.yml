@@ -23,13 +23,26 @@ jobs:
       - name: Ensure Rosetta 2 is available
         run: softwareupdate --install-rosetta --agree-to-license || true
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          architecture: x64          # Intel Python (runs under Rosetta)
+      # actions/setup-python does NOT provide an Intel build on Apple Silicon
+      # runners (it returns arm64), so install a real x86_64 Python via the
+      # Miniforge Intel installer. Running that x86_64 python under Rosetta
+      # reports machine == 'x86_64', so pip pulls Intel wheels and PyInstaller
+      # produces an Intel app.
+      - name: Set up Intel (x86_64) Python via Miniforge
+        run: |
+          set -e
+          curl -L -o miniforge.sh \
+            "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-x86_64.sh"
+          bash miniforge.sh -b -p "$HOME/mf-x64"
+          "$HOME/mf-x64/bin/conda" create -y -n build python=3.11 tk
+          # Put the Intel env first on PATH for all later steps.
+          echo "$HOME/mf-x64/envs/build/bin" >> "$GITHUB_PATH"
 
       - name: Confirm interpreter is Intel x86_64
-        run: python -c "import platform, sys; print('machine:', platform.machine()); assert platform.machine() == 'x86_64', 'Expected x86_64 Python'"
+        run: |
+          which python
+          python -c "import platform; print('machine:', platform.machine()); assert platform.machine() == 'x86_64', 'Expected x86_64 Python'"
+          python -c "import tkinter; print('tkinter OK')"
 
       - name: Install dependencies
         run: |
