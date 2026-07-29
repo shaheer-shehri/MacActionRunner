@@ -16,7 +16,6 @@ Input/
 Output/
 Builder Buy Boxes/
 /Master_Buyer_Buy_Boxes.xlsx
-*.command
 # ...but the sanitized template IS tracked:
 !template/Master_Buyer_Buy_Boxes.xlsx
 
