@@ -22,6 +22,7 @@ Two outputs are produced from the matrix:
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 
 import pandas as pd
@@ -32,8 +33,29 @@ from .utils import clean, to_number
 # ---------------------------------------------------------------------------
 # Loading the workbook
 # ---------------------------------------------------------------------------
-_ACTIVE_TRUE = {"", "YES", "Y", "TRUE", "1", "ACTIVE"}
+# A row is ACTIVE unless its Active cell CLEARLY says otherwise. This is
+# deliberately permissive so valid builders are never dropped over formatting
+# quirks (Numbers->XLSX exports, hidden characters, a numeric 1, "Yes ", etc.).
+_ACTIVE_FALSE = {"NO", "N", "FALSE", "F", "0", "INACTIVE", "OFF", "DISABLED", "NONE"}
 _RECOMMENDED_COLUMNS = ["Builder", "County", "City/Area", "ZIP Codes", "Min Acres", "Max Acres"]
+_HIDDEN_CHARS = re.compile(r"[​‌‍⁠﻿\xa0]")
+
+
+def _norm_cell(value: object) -> str:
+    """Uppercase, drop hidden/zero-width chars, unify unicode, trim, and turn a
+    numeric 1.0 into 1 — so quirky spreadsheet cells compare cleanly."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    s = unicodedata.normalize("NFKC", str(value))
+    s = _HIDDEN_CHARS.sub(" ", s)
+    s = s.strip().upper()
+    if s.endswith(".0") and s[:-2].isdigit():
+        s = s[:-2]
+    return s
+
+
+def _builder_col(df: pd.DataFrame) -> str | None:
+    return next((c for c in ("Builder", "Buyer", "Company") if c in df.columns), None)
 
 
 def _read_buy_box_sheet(workbook: Path) -> tuple[pd.DataFrame, str]:
@@ -51,7 +73,7 @@ def _read_buy_box_sheet(workbook: Path) -> tuple[pd.DataFrame, str]:
     for sheet in order:
         df = pd.read_excel(xls, sheet_name=sheet, dtype=str)
         df.columns = [str(c).strip() for c in df.columns]
-        if "Builder" in df.columns or "Buyer" in df.columns:
+        if _builder_col(df):
             return df, sheet
         if best is None:
             best = (df, sheet)
@@ -60,22 +82,67 @@ def _read_buy_box_sheet(workbook: Path) -> tuple[pd.DataFrame, str]:
     return best
 
 
+def _classify_rows(df: pd.DataFrame) -> tuple[list, list[tuple]]:
+    """
+    Return (kept_index_list, rejections). A row is kept when it has a Builder
+    name and is not explicitly marked inactive. Fully-blank spacer rows are
+    ignored silently; rows with data but no builder, or an explicit inactive
+    flag, are reported with a reason.
+    """
+    bcol = _builder_col(df)
+    has_active = "Active" in df.columns
+    kept: list = []
+    rejects: list[tuple] = []
+    for i in df.index:
+        row = df.loc[i]
+        if not any(_norm_cell(v) for v in row.values):
+            continue  # completely blank spacer row
+        builder = _norm_cell(row[bcol]) if bcol else ""
+        if not builder:
+            rejects.append((i, "", "row has data but no Builder name"))
+            continue
+        if has_active:
+            raw = row["Active"]
+            if _norm_cell(raw) in _ACTIVE_FALSE:
+                rejects.append((i, clean(row[bcol]), f"Active = '{clean(raw)}' (treated as inactive)"))
+                continue
+        kept.append(i)
+    return kept, rejects
+
+
 def inspect_workbook(workbook: Path) -> dict:
-    """Return facts about the workbook for diagnostics (never raises)."""
-    info = {"error": None, "sheet": None, "rows": 0, "active": 0, "missing_columns": []}
+    """Rich, never-raising facts about the workbook for diagnostics."""
+    info = {
+        "error": None, "sheet": None, "columns": [], "sample_rows": [],
+        "rows_with_data": 0, "active": 0, "rejected": [], "missing_columns": [],
+        "has_active_column": False,
+    }
     try:
         df, sheet = _read_buy_box_sheet(workbook)
     except Exception as exc:  # noqa: BLE001
         info["error"] = str(exc)
         return info
     info["sheet"] = sheet
-    info["rows"] = len(df)
-    if "Active" in df.columns:
-        active = df["Active"].fillna("").astype(str).str.strip().str.upper()
-        info["active"] = int(active.isin(_ACTIVE_TRUE).sum())
-    else:
-        info["active"] = len(df)  # no Active column -> treat all as active
+    info["columns"] = list(df.columns)
+    info["has_active_column"] = "Active" in df.columns
     info["missing_columns"] = [c for c in _RECOMMENDED_COLUMNS if c not in df.columns]
+
+    kept, rejects = _classify_rows(df)
+    info["rows_with_data"] = len(kept) + len(rejects)
+    info["active"] = len(kept)
+    info["rejected"] = [(clean(b) or f"(row {int(i) + 2})", reason) for i, b, reason in rejects]
+
+    # First two data rows, compact "col=value" form (key columns first).
+    key = [c for c in ["Builder", "Buyer", "Active", "County", "City/Area", "ZIP Codes",
+                       "Min Acres", "Max Acres"] if c in df.columns]
+    other = [c for c in df.columns if c not in key]
+    for i in (kept + [i for i, _, _ in rejects])[:2]:
+        cells = []
+        for c in (key + other):
+            v = clean(df.at[i, c])
+            if v:
+                cells.append(f"{c}={v[:24]}")
+        info["sample_rows"].append(" | ".join(cells[:8]))
     return info
 
 
@@ -86,10 +153,8 @@ def load_buy_boxes(workbook: Path) -> pd.DataFrame:
         df, _ = _read_buy_box_sheet(workbook)
     except Exception:
         return pd.DataFrame()
-    if "Active" in df.columns:
-        active = df["Active"].fillna("").astype(str).str.strip().str.upper()
-        df = df[active.isin(_ACTIVE_TRUE)]
-    return df.reset_index(drop=True)
+    kept, _ = _classify_rows(df)
+    return df.loc[kept].reset_index(drop=True)
 
 
 def load_contacts(workbook: Path) -> dict[str, dict]:

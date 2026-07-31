@@ -21,7 +21,7 @@ from pathlib import Path
 
 from . import detect, vacant_filter, buyers, outputs, extract
 from .report import RunReport
-from .diagnostics import Diagnostics
+from .diagnostics import Diagnostics, emit_workbook
 from .utils import finalize_standard, blank_standard_frame
 
 
@@ -165,18 +165,7 @@ def run(sink=None) -> int:
         diag.fail("Builder Buy Box workbook not found. Put 'Master_Buyer_Buy_Boxes.xlsx' "
                   "in the 'Builder Buy Boxes' folder.")
     else:
-        info = buyers.inspect_workbook(workbook)
-        if info["error"]:
-            diag.fail(f"Builder Buy Box workbook could not be read: {info['error']}")
-        else:
-            diag.ok(f"Buy Box file loaded successfully ({info['rows']} row(s), sheet '{info['sheet']}').")
-            if info["active"] == 0:
-                diag.fail("No active builders found. Set 'Active' to Yes on your rows, or "
-                          "replace the template with your real workbook.")
-            else:
-                diag.ok(f"{info['active']} active builder buy box(es) loaded.")
-            if info["missing_columns"]:
-                diag.warn("Buy Box missing recommended column(s): " + ", ".join(info["missing_columns"]))
+        emit_workbook(diag, buyers.inspect_workbook(workbook))
 
     buy_boxes = buyers.load_buy_boxes(workbook)
     contacts = buyers.load_contacts(workbook)

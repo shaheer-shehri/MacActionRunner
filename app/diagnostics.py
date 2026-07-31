@@ -69,6 +69,37 @@ class Diagnostics:
         return path
 
 
+def emit_workbook(diag: "Diagnostics", info: dict) -> None:
+    """Write the detailed Buy Box findings (columns, sample rows, before/after
+    counts, and the exact reason each row was rejected)."""
+    if info.get("error"):
+        diag.fail(f"Builder Buy Box workbook could not be read: {info['error']}")
+        return
+
+    diag.ok(f"Buy Box file loaded successfully (sheet '{info['sheet']}').")
+    diag.info("Detected columns: " + (", ".join(info["columns"]) or "(none)"))
+    for n, row in enumerate(info.get("sample_rows", []), start=1):
+        diag.info(f"Row {n}: {row}")
+    diag.info(f"Builder rows before Active filter: {info['rows_with_data']}")
+    diag.info(f"Builder rows remaining after Active filter: {info['active']}")
+
+    if not info.get("has_active_column"):
+        diag.info("No 'Active' column present — every builder row is treated as active.")
+
+    if info["active"] == 0:
+        diag.fail("No active builders found. Every row was rejected (see reasons below), "
+                  "or the workbook is still the template. Set 'Active' to Yes on your rows, "
+                  "or replace the template with your real workbook.")
+    else:
+        diag.ok(f"{info['active']} active builder buy box(es) loaded.")
+
+    for name, reason in info.get("rejected", []):
+        diag.warn(f"Rejected {name}: {reason}")
+
+    if info["missing_columns"]:
+        diag.warn("Buy Box missing recommended column(s): " + ", ".join(info["missing_columns"]))
+
+
 def preflight(root: Path) -> Diagnostics:
     """
     A quick check WITHOUT full processing, for the Diagnostics button: is the
@@ -85,20 +116,7 @@ def preflight(root: Path) -> Diagnostics:
         diag.fail("Builder Buy Box workbook not found at 'Builder Buy Boxes/"
                   "Master_Buyer_Buy_Boxes.xlsx'. Put your workbook there.")
     else:
-        info = buyers.inspect_workbook(workbook)
-        if info["error"]:
-            diag.fail(f"Builder Buy Box workbook could not be read: {info['error']}")
-        else:
-            diag.ok(f"Buy Box file loaded successfully ({info['rows']} row(s) on sheet "
-                    f"'{info['sheet']}').")
-            if info["active"] == 0:
-                diag.fail("No active builders found. Set 'Active' to Yes on your rows, "
-                          "or replace the template with your real workbook.")
-            else:
-                diag.ok(f"{info['active']} active builder buy box(es) found.")
-            if info["missing_columns"]:
-                diag.warn("Buy Box is missing recommended column(s): "
-                          + ", ".join(info["missing_columns"]))
+        emit_workbook(diag, buyers.inspect_workbook(workbook))
 
     # --- Input folders ---
     input_root = root / "Input"
