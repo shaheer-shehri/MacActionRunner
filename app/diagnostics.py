@@ -72,9 +72,16 @@ class Diagnostics:
 def emit_workbook(diag: "Diagnostics", info: dict) -> None:
     """Write the detailed Buy Box findings (columns, sample rows, before/after
     counts, and the exact reason each row was rejected)."""
+    if info.get("path"):
+        diag.info(f"Reading Buy Boxes from: {info['path']}")
     if info.get("error"):
         diag.fail(f"Builder Buy Box workbook could not be read: {info['error']}")
         return
+
+    if info.get("is_template"):
+        diag.fail("This is the built-in EXAMPLE template, NOT your real workbook. "
+                  "Replace the file shown above with your own Master_Buyer_Buy_Boxes.xlsx "
+                  "(put it in this exact folder), then run again.")
 
     diag.ok(f"Buy Box file loaded successfully (sheet '{info['sheet']}').")
     diag.info("Detected columns: " + (", ".join(info["columns"]) or "(none)"))
@@ -109,12 +116,17 @@ def preflight(root: Path) -> Diagnostics:
     from . import detect, extract, buyers
 
     diag = Diagnostics("PRE-FLIGHT DIAGNOSTICS")
-    workbook = root / "Builder Buy Boxes" / "Master_Buyer_Buy_Boxes.xlsx"
+    diag.info(f"Working folder: {root}")
+    bb_dir = root / "Builder Buy Boxes"
+    workbook, wb_candidates = buyers.resolve_workbook(bb_dir)
 
     # --- Buy Box workbook ---
+    if len(wb_candidates) > 1:
+        diag.info(f"{len(wb_candidates)} workbook(s) in Builder Buy Boxes: "
+                  + ", ".join(p.name for p in wb_candidates))
     if not workbook.exists():
-        diag.fail("Builder Buy Box workbook not found at 'Builder Buy Boxes/"
-                  "Master_Buyer_Buy_Boxes.xlsx'. Put your workbook there.")
+        diag.fail(f"Builder Buy Box workbook not found. Put your "
+                  f"Master_Buyer_Buy_Boxes.xlsx in this folder: {bb_dir}")
     else:
         emit_workbook(diag, buyers.inspect_workbook(workbook))
 

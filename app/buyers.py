@@ -58,6 +58,52 @@ def _builder_col(df: pd.DataFrame) -> str | None:
     return next((c for c in ("Builder", "Buyer", "Company") if c in df.columns), None)
 
 
+def _is_template_df(df: pd.DataFrame) -> bool:
+    """True if this looks like the shipped EXAMPLE template (placeholder rows)."""
+    bcol = _builder_col(df)
+    if not bcol:
+        return False
+    names = " ".join(_norm_cell(v) for v in df[bcol].tolist())
+    return "EXAMPLE" in names
+
+
+def resolve_workbook(bb_dir: Path, default_name: str = "Master_Buyer_Buy_Boxes.xlsx"
+                     ) -> tuple[Path, list[Path]]:
+    """
+    Choose which workbook to use from the Builder Buy Boxes folder, and return
+    (chosen_path, all_candidate_paths).
+
+    Preference: a REAL workbook (not the EXAMPLE template) with the most active
+    builders wins — so a leftover template, or a file saved under a slightly
+    different name, can't cause the template to be used by mistake. Falls back to
+    the canonical default path if nothing better exists.
+    """
+    default = bb_dir / default_name
+    if not bb_dir.exists():
+        return default, []
+    candidates = sorted(
+        p for p in bb_dir.glob("*.xls*")
+        if not p.name.startswith(("~$", ".") )
+    )
+    if not candidates:
+        return default, []
+
+    best = None  # (is_real, active_count, is_default, path)
+    for p in candidates:
+        try:
+            df, _ = _read_buy_box_sheet(p)
+            kept, _r = _classify_rows(df)
+            is_real = not _is_template_df(df)
+            active = len(kept)
+        except Exception:  # noqa: BLE001
+            is_real, active = False, -1
+        rank = (1 if is_real else 0, active, 1 if p == default else 0)
+        if best is None or rank > best[0]:
+            best = (rank, p)
+    chosen = best[1] if best else default
+    return chosen, candidates
+
+
 def _read_buy_box_sheet(workbook: Path) -> tuple[pd.DataFrame, str]:
     """
     Read the buy-box sheet as strings. Tries the 'Buy Boxes' sheet first, then
@@ -113,9 +159,9 @@ def _classify_rows(df: pd.DataFrame) -> tuple[list, list[tuple]]:
 def inspect_workbook(workbook: Path) -> dict:
     """Rich, never-raising facts about the workbook for diagnostics."""
     info = {
-        "error": None, "sheet": None, "columns": [], "sample_rows": [],
-        "rows_with_data": 0, "active": 0, "rejected": [], "missing_columns": [],
-        "has_active_column": False,
+        "error": None, "path": str(workbook), "sheet": None, "columns": [],
+        "sample_rows": [], "rows_with_data": 0, "active": 0, "rejected": [],
+        "missing_columns": [], "has_active_column": False, "is_template": False,
     }
     try:
         df, sheet = _read_buy_box_sheet(workbook)
@@ -123,6 +169,7 @@ def inspect_workbook(workbook: Path) -> dict:
         info["error"] = str(exc)
         return info
     info["sheet"] = sheet
+    info["is_template"] = _is_template_df(df)
     info["columns"] = list(df.columns)
     info["has_active_column"] = "Active" in df.columns
     info["missing_columns"] = [c for c in _RECOMMENDED_COLUMNS if c not in df.columns]

@@ -143,11 +143,14 @@ def run(sink=None) -> int:
     root = find_root()
     input_root = root / "Input"
     output_root = root / "Output"
-    workbook = root / "Builder Buy Boxes" / "Master_Buyer_Buy_Boxes.xlsx"
+    bb_dir = root / "Builder Buy Boxes"
+    workbook, wb_candidates = buyers.resolve_workbook(bb_dir)
 
     report = RunReport(sink=sink)
     diag = Diagnostics("RUN DIAGNOSTICS")
+    diag.info(f"Working folder: {root}")
     report.header("FLORIDA LAND MACHINE")
+    report.log(f"Working folder: {root}")
     report.log(f"Input folder  : {input_root}")
     report.log(f"Output folder : {output_root}")
     report.log(f"Buy boxes     : {workbook}  ({'found' if workbook.exists() else 'MISSING'})")
@@ -161,9 +164,12 @@ def run(sink=None) -> int:
         return 1
 
     # --- Buy Box workbook diagnostics ---
+    if len(wb_candidates) > 1:
+        diag.info(f"{len(wb_candidates)} workbook(s) in Builder Buy Boxes: "
+                  + ", ".join(p.name for p in wb_candidates))
     if not workbook.exists():
         diag.fail("Builder Buy Box workbook not found. Put 'Master_Buyer_Buy_Boxes.xlsx' "
-                  "in the 'Builder Buy Boxes' folder.")
+                  f"in this folder: {bb_dir}")
     else:
         emit_workbook(diag, buyers.inspect_workbook(workbook))
 
