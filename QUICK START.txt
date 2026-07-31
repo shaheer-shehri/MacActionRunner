@@ -42,6 +42,11 @@ THE 3-STEP WORKFLOW
    The app window opens; click "Run". When it finishes it shows the results
    and can open the Output folder for you.
 
+   IMPORTANT: always start the app with "Run Florida Land Machine.command".
+   Do NOT double-click "Florida Land Machine.app" directly — macOS would run it
+   from a read-only system copy (App Translocation) and it could not see your
+   Input/Output folders. The launcher starts it correctly from this folder.
+
    Keep the launcher and the app together in the same folder.
 
 

@@ -14,6 +14,7 @@ Run from the project root:  python -m app.main
 """
 from __future__ import annotations
 
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -28,16 +29,35 @@ def find_root() -> Path:
     """
     The working folder that holds Input/, Output/ and Builder Buy Boxes/.
 
-    * Running from source: the parent of the app/ package.
-    * Running as a compiled macOS .app: the folder that CONTAINS the .app bundle,
-      so the user's Input/Output sit right next to the double-clickable app.
+    Resolution order:
+      1. FLM_HOME env var — set by the launcher to the app's REAL folder. This is
+         authoritative and survives macOS "App Translocation" (where the app is
+         copied to a random read-only path).
+      2. Compiled .app: the folder containing the .app bundle — but only if the
+         app is NOT translocated (a translocated path is read-only and useless).
+      3. Translocated with no FLM_HOME: fall back to a writable folder in the
+         user's home so the app never crashes on a read-only filesystem.
+      4. Running from source: the parent of the app/ package.
     """
+    env = os.environ.get("FLM_HOME")
+    if env:
+        p = Path(env).expanduser()
+        if p.exists():
+            return p
+
     if getattr(sys, "frozen", False):
         exe = Path(sys.executable).resolve()
-        for parent in exe.parents:
-            if parent.suffix == ".app":
-                return parent.parent
-        return exe.parent
+        if "AppTranslocation" not in str(exe):
+            for parent in exe.parents:
+                if parent.suffix == ".app":
+                    return parent.parent
+            return exe.parent
+        # Translocated and launched without the launcher: use a stable writable
+        # home folder so Input/Output still work.
+        home = Path.home() / "Florida Land Machine"
+        home.mkdir(parents=True, exist_ok=True)
+        return home
+
     return Path(__file__).resolve().parent.parent
 
 
