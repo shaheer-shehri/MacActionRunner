@@ -25,19 +25,21 @@ from .diagnostics import Diagnostics, emit_workbook
 from .utils import finalize_standard, blank_standard_frame
 
 
+DATA_FOLDER_NAME = "Florida Land Machine"
+
+
 def find_root() -> Path:
     """
     The working folder that holds Input/, Output/ and Builder Buy Boxes/.
 
-    Resolution order:
-      1. FLM_HOME env var — set by the launcher to the app's REAL folder. This is
-         authoritative and survives macOS "App Translocation" (where the app is
-         copied to a random read-only path).
-      2. Compiled .app: the folder containing the .app bundle — but only if the
-         app is NOT translocated (a translocated path is read-only and useless).
-      3. Translocated with no FLM_HOME: fall back to a writable folder in the
-         user's home so the app never crashes on a read-only filesystem.
-      4. Running from source: the parent of the app/ package.
+    The COMPILED app always uses one fixed, writable folder in the user's home:
+    ~/Florida Land Machine. This is deliberate — it is the same location every
+    run, regardless of where the .app is placed or how it is launched, and it is
+    immune to macOS "App Translocation" (which runs a downloaded app from a
+    random READ-ONLY path). The in-app buttons open this exact folder.
+
+    An explicit FLM_HOME environment variable overrides it (for testing/portable
+    use). Running from source uses the parent of the app/ package.
     """
     env = os.environ.get("FLM_HOME")
     if env:
@@ -46,15 +48,7 @@ def find_root() -> Path:
             return p
 
     if getattr(sys, "frozen", False):
-        exe = Path(sys.executable).resolve()
-        if "AppTranslocation" not in str(exe):
-            for parent in exe.parents:
-                if parent.suffix == ".app":
-                    return parent.parent
-            return exe.parent
-        # Translocated and launched without the launcher: use a stable writable
-        # home folder so Input/Output still work.
-        home = Path.home() / "Florida Land Machine"
+        home = Path.home() / DATA_FOLDER_NAME
         home.mkdir(parents=True, exist_ok=True)
         return home
 

@@ -84,8 +84,10 @@ class App(ttk.Frame):
 
         steps = ttk.Label(
             self, justify="left", foreground="#333",
-            text=("1.  Put each county's downloaded files in a folder inside 'Input'.\n"
-                  "2.  Click Run.  3.  Open 'Output' for your lists."))
+            text=("1.  Click 'Edit Buy Boxes' and replace the example workbook with yours.\n"
+                  "2.  Click 'Open Input Folder' and put each county's files in a subfolder.\n"
+                  "3.  Click Run.  Then use 'Open Output Folder' for your lists.\n"
+                  "(All these folders live in the working folder shown above.)"))
         steps.pack(anchor="w", pady=(0, 10))
 
         btns = ttk.Frame(self)

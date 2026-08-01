@@ -17,11 +17,27 @@ It also keeps growing Master files that combine every county you have
 processed.
 
 
+WHERE YOUR FILES LIVE
+---------------------
+The app keeps its folders in your HOME folder, inside "Florida Land Machine":
+
+        /Users/<you>/Florida Land Machine/
+          Input/               <- county downloads go here
+          Output/              <- your results appear here
+          Builder Buy Boxes/   <- your Master_Buyer_Buy_Boxes.xlsx goes here
+
+This location is always the same, no matter where you keep the app. The easiest
+way to open these is the buttons inside the app window ("Open Input Folder",
+"Open Output Folder", "Edit Buy Boxes"). The window also shows the exact
+"Working folder" path at the top.
+
+
 THE 3-STEP WORKFLOW
 -------------------
 1. DOWNLOAD the newest county files from the county's website.
 
-2. PLACE them in the Input folder, inside a folder named for the county:
+2. PLACE them in the Input folder, inside a folder named for the county
+   (use the "Open Input Folder" button to get there):
 
         Input/
           Brevard/        <- put Brevard's files here

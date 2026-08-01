@@ -28,12 +28,14 @@ if [ ! -x "$BIN" ]; then
     exit 1
 fi
 
-# Allow the unsigned app to run (and prevent translocation) by clearing the
-# 'downloaded from the internet' quarantine flag.
+# Allow the unsigned app to run by clearing the 'downloaded from the internet'
+# quarantine flag (also avoids the Gatekeeper "unidentified developer" block).
 xattr -dr com.apple.quarantine "$APP" 2>/dev/null
 xattr -d  com.apple.quarantine "$0"   2>/dev/null
 
-# Tell the app where its real folder is, then launch its program directly
-# (NOT via 'open') so macOS runs it in place instead of a read-only copy.
-export FLM_HOME="$DIR"
+echo "Starting Florida Land Machine..."
+echo "Your Input, Output and Builder Buy Boxes folders are in your Home folder,"
+echo "inside 'Florida Land Machine'. The app's buttons open them for you."
+
+# Launch the app's program directly (not via 'open').
 "$BIN"
