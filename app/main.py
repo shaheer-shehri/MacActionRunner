@@ -32,20 +32,25 @@ def find_root() -> Path:
     """
     The working folder that holds Input/, Output/ and Builder Buy Boxes/.
 
-    The COMPILED app always uses one fixed, writable folder in the user's home:
-    ~/Florida Land Machine. This is deliberate — it is the same location every
-    run, regardless of where the .app is placed or how it is launched, and it is
-    immune to macOS "App Translocation" (which runs a downloaded app from a
-    random READ-ONLY path). The in-app buttons open this exact folder.
-
-    An explicit FLM_HOME environment variable overrides it (for testing/portable
-    use). Running from source uses the parent of the app/ package.
+    Resolution order:
+      1. FLM_HOME environment variable (testing / portable override).
+      2. The folder the user picked with "Change Working Folder…", remembered in
+         ~/.florida_land_machine/config.json. This is the reliable way to point
+         the app at exactly where your files live.
+      3. Compiled app default: ~/Florida Land Machine (fixed, writable, immune to
+         macOS App Translocation).
+      4. Running from source: the parent of the app/ package.
     """
     env = os.environ.get("FLM_HOME")
     if env:
         p = Path(env).expanduser()
         if p.exists():
             return p
+
+    from . import settings
+    saved = settings.load_working_dir()
+    if saved is not None:
+        return saved
 
     if getattr(sys, "frozen", False):
         home = Path.home() / DATA_FOLDER_NAME

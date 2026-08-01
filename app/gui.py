@@ -17,9 +17,10 @@ import threading
 from pathlib import Path
 
 import tkinter as tk
-from tkinter import ttk, scrolledtext
+from tkinter import ttk, scrolledtext, filedialog
 
 from . import main as pipeline
+from . import settings
 
 APP_TITLE = "Florida Land Machine"
 
@@ -77,17 +78,21 @@ class App(ttk.Frame):
         header = ttk.Label(self, text=APP_TITLE, font=("Helvetica", 18, "bold"))
         header.pack(anchor="w")
 
-        loc = ttk.Label(
-            self, foreground="#555",
-            text=f"Working folder:  {self.root_dir}")
-        loc.pack(anchor="w", pady=(2, 10))
+        folder_row = ttk.Frame(self)
+        folder_row.pack(fill="x", pady=(2, 8))
+        self.loc = ttk.Label(folder_row, foreground="#555",
+                             text=f"Working folder:  {self.root_dir}")
+        self.loc.pack(side="left")
+        ttk.Button(folder_row, text="Change Working Folder…",
+                   command=self._choose_folder).pack(side="right")
 
         steps = ttk.Label(
             self, justify="left", foreground="#333",
-            text=("1.  Click 'Edit Buy Boxes' and replace the example workbook with yours.\n"
-                  "2.  Click 'Open Input Folder' and put each county's files in a subfolder.\n"
-                  "3.  Click Run.  Then use 'Open Output Folder' for your lists.\n"
-                  "(All these folders live in the working folder shown above.)"))
+            text=("1.  Set 'Change Working Folder…' to where you keep your files (optional —\n"
+                  "     the default is a 'Florida Land Machine' folder in your Home folder).\n"
+                  "2.  'Edit Buy Boxes' -> replace the example workbook with yours.\n"
+                  "3.  'Open Input Folder' -> put each county's files in a subfolder.\n"
+                  "4.  Click Run.  Then use 'Open Output Folder' for your lists."))
         steps.pack(anchor="w", pady=(0, 10))
 
         btns = ttk.Frame(self)
@@ -112,6 +117,25 @@ class App(ttk.Frame):
 
         self.status = ttk.Label(self, text="Ready.", foreground="#357a38")
         self.status.pack(anchor="w", pady=(8, 0))
+
+    # -- working folder selection ------------------------------------------
+    def _choose_folder(self) -> None:
+        chosen = filedialog.askdirectory(
+            title="Choose the folder for Input, Output and Builder Buy Boxes",
+            initialdir=str(self.root_dir), mustexist=True)
+        if not chosen:
+            return
+        path = Path(chosen)
+        settings.save_working_dir(path)
+        self.root_dir = path
+        try:
+            scaffold(path)
+        except Exception:  # noqa: BLE001
+            pass
+        self.loc.configure(text=f"Working folder:  {path}")
+        self._sink(f"Working folder set to: {path}")
+        self._sink("Your Input, Output and Builder Buy Boxes folders are here now. "
+                   "Put your workbook and county folders here, then click Run.")
 
     # -- logging plumbing (worker thread -> queue -> UI) --------------------
     def _sink(self, text: str) -> None:

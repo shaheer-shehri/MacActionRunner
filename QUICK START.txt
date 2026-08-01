@@ -31,6 +31,12 @@ way to open these is the buttons inside the app window ("Open Input Folder",
 "Open Output Folder", "Edit Buy Boxes"). The window also shows the exact
 "Working folder" path at the top.
 
+PREFER A DIFFERENT FOLDER?  Click "Change Working Folder…" and pick any folder
+you like (for example one on your Desktop with your workbook and county data
+already in it). The app remembers your choice and uses it every time from then
+on. Whatever folder you pick, the app creates Input/, Output/ and
+Builder Buy Boxes/ inside it if they aren't there yet.
+
 
 THE 3-STEP WORKFLOW
 -------------------
