@@ -205,10 +205,15 @@ def run(sink=None) -> int:
             builders_hit = matrix['Matched_Builder'].nunique()
             report.log(f"Builder matches : {len(matrix):,} pairs across {builders_hit} builders")
             report.log(f"Final buyer list: {len(final):,} properties (best builder each)")
+        elif buy_boxes.empty:
+            # No active builders loaded at all — the real reason for zero matches.
+            report.log("Builder matches : 0 (no ACTIVE builders are loaded — "
+                       "use 'Import Buy Boxes…' to load your workbook)")
+            diag.info(f"{county}: 0 builder matches because no active builders are loaded.")
         else:
-            report.log("Builder matches : 0 (no active buy box targets this county)")
-            if not buy_boxes.empty:
-                diag.info(f"{county}: 0 builder matches (no active buy box targets this county).")
+            report.log("Builder matches : 0 (builders are loaded, but none target this county)")
+            diag.info(f"{county}: 0 builder matches — buy boxes are loaded, but none target "
+                      f"this county (check the County/City/ZIP/acreage criteria).")
 
     if any_ok:
         counts = outputs.rebuild_master(paths)
