@@ -88,11 +88,11 @@ class App(ttk.Frame):
 
         steps = ttk.Label(
             self, justify="left", foreground="#333",
-            text=("1.  Set 'Change Working Folder…' to where you keep your files (optional —\n"
-                  "     the default is a 'Florida Land Machine' folder in your Home folder).\n"
-                  "2.  'Edit Buy Boxes' -> replace the example workbook with yours.\n"
-                  "3.  'Open Input Folder' -> put each county's files in a subfolder.\n"
-                  "4.  Click Run.  Then use 'Open Output Folder' for your lists."))
+            text=("1.  Click 'Import Buy Boxes…' and pick YOUR workbook (it is copied into\n"
+                  "     place for you — you don't need to know the folder).\n"
+                  "2.  'Open Input Folder' -> put each county's files in a subfolder.\n"
+                  "3.  Click Run.  Then use 'Open Output Folder' for your lists.\n"
+                  "(Optional: 'Change Working Folder…' to use a folder of your choice.)"))
         steps.pack(anchor="w", pady=(0, 10))
 
         btns = ttk.Frame(self)
@@ -101,8 +101,10 @@ class App(ttk.Frame):
                    command=lambda: _open_folder(self.root_dir / "Input")).pack(side="left")
         ttk.Button(btns, text="Open Output Folder",
                    command=lambda: _open_folder(self.root_dir / "Output")).pack(side="left", padx=6)
-        ttk.Button(btns, text="Edit Buy Boxes",
-                   command=lambda: _open_folder(self.root_dir / "Builder Buy Boxes")).pack(side="left")
+        ttk.Button(btns, text="Import Buy Boxes…",
+                   command=self._import_buy_boxes).pack(side="left")
+        ttk.Button(btns, text="Open Buy Boxes Folder",
+                   command=lambda: _open_folder(self.root_dir / "Builder Buy Boxes")).pack(side="left", padx=6)
         self.run_btn = ttk.Button(btns, text="▶  Run", command=self._start)
         self.run_btn.pack(side="right")
         self.diag_btn = ttk.Button(btns, text="Diagnostics", command=self._diagnostics)
@@ -117,6 +119,37 @@ class App(ttk.Frame):
 
         self.status = ttk.Label(self, text="Ready.", foreground="#357a38")
         self.status.pack(anchor="w", pady=(8, 0))
+
+    # -- import the user's Buy Boxes workbook ------------------------------
+    def _import_buy_boxes(self) -> None:
+        src = filedialog.askopenfilename(
+            title="Choose YOUR Buy Boxes workbook (Master_Buyer_Buy_Boxes.xlsx)",
+            initialdir=str(Path.home()),
+            filetypes=[("Excel workbook", "*.xlsx *.xlsm *.xls"), ("All files", "*.*")])
+        if not src:
+            return
+        from . import buyers
+        dest_dir = self.root_dir / "Builder Buy Boxes"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / "Master_Buyer_Buy_Boxes.xlsx"
+        try:
+            shutil.copyfile(src, dest)
+        except Exception as exc:  # noqa: BLE001
+            self._sink(f"Could not import that file: {exc}")
+            return
+
+        info = buyers.inspect_workbook(dest)
+        self._sink(f"Imported your workbook to:\n  {dest}")
+        if info.get("error"):
+            self._sink(f"⚠️  But it could not be read: {info['error']}")
+        elif info.get("is_template"):
+            self._sink("⚠️  That file looks like the EXAMPLE template (builders named "
+                       "'EXAMPLE'). Please import your REAL workbook instead.")
+        elif info.get("active", 0) == 0:
+            self._sink("⚠️  Imported, but 0 active builders were found. Check the 'Active' "
+                       "column, then click Diagnostics.")
+        else:
+            self._sink(f"✅  {info['active']} active builder(s) loaded. You're ready — click Run.")
 
     # -- working folder selection ------------------------------------------
     def _choose_folder(self) -> None:

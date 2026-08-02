@@ -142,6 +142,20 @@ You can also click the "Diagnostics" button any time for an instant check
 red ❌, send that file to your developer and they'll know exactly what to fix.
 
 
+USING YOUR OWN BUY BOXES WORKBOOK
+---------------------------------
+Easiest: click "Import Buy Boxes…" in the app, pick your workbook wherever it is
+(Desktop, Downloads, etc.), and the app copies it into the right place and tells
+you how many active builders it found. You never have to know the folder.
+
+Where the app keeps it (if you prefer to place it yourself):
+    <Working folder>/Builder Buy Boxes/Master_Buyer_Buy_Boxes.xlsx
+The <Working folder> is shown at the top of the app window (default:
+your Home folder -> "Florida Land Machine"). The file MUST be named
+Master_Buyer_Buy_Boxes.xlsx. If both your file and the example template are in
+that folder, the app automatically uses your real one.
+
+
 ADDING / EDITING BUILDERS (NO CODE)
 -----------------------------------
 Open:  Builder Buy Boxes/Master_Buyer_Buy_Boxes.xlsx
