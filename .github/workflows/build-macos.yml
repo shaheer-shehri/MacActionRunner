@@ -3,6 +3,11 @@ name: Build macOS app (Intel x86_64)
 on:
   push:
     branches: [ main ]
+    # The repo also hosts the unrelated bookformatter/ project; changes there
+    # must not trigger a Florida rebuild. Everything else still does.
+    paths-ignore:
+      - 'bookformatter/**'
+      - '.github/workflows/build-bookformatter.yml'
   workflow_dispatch:
   release:
     types: [ created ]

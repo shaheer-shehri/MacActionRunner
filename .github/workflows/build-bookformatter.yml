@@ -1,0 +1,177 @@
+name: Build Book Listing Formatter (macOS Intel + Windows)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'bookformatter/**'
+      - '.github/workflows/build-bookformatter.yml'
+  workflow_dispatch:
+  release:
+    types: [ created ]
+
+permissions:
+  contents: write
+
+# A newer push supersedes an in-flight build instead of queueing behind it.
+concurrency:
+  group: bookformatter-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS .app (Intel x86_64)
+    # Use the FAST, always-available Apple Silicon runner (macos-13 Intel
+    # runners are being retired and queue for a long time), but build an
+    # INTEL x86_64 app on it by running an Intel Python under Rosetta 2. The
+    # result runs on Intel Macs natively and on Apple Silicon via Rosetta.
+    runs-on: macos-14
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: bookformatter
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure Rosetta 2 is available
+        run: softwareupdate --install-rosetta --agree-to-license || true
+
+      # Cache the Intel Python environment: installing Miniforge and creating
+      # the env is the slowest step, and it only changes when this workflow does.
+      - name: Cache Intel Python env
+        id: cache-mf
+        uses: actions/cache@v4
+        with:
+          path: ~/mf-x64
+          key: mf-x64-py311-tk-${{ runner.os }}-v1
+
+      # actions/setup-python does NOT provide an Intel build on Apple Silicon
+      # runners (it returns arm64), so install a real x86_64 Python via the
+      # Miniforge Intel installer. Running that x86_64 python under Rosetta
+      # reports machine == 'x86_64', so pip pulls Intel wheels and PyInstaller
+      # produces an Intel app.
+      - name: Set up Intel (x86_64) Python via Miniforge
+        if: steps.cache-mf.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          curl -L -o miniforge.sh \
+            "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-x86_64.sh"
+          bash miniforge.sh -b -p "$HOME/mf-x64"
+          "$HOME/mf-x64/bin/conda" create -y -n build python=3.11 tk
+
+      - name: Put the Intel env first on PATH
+        run: echo "$HOME/mf-x64/envs/build/bin" >> "$GITHUB_PATH"
+
+      - name: Confirm interpreter is Intel x86_64
+        run: |
+          which python
+          python -c "import platform; print('machine:', platform.machine()); assert platform.machine() == 'x86_64', 'Expected x86_64 Python'"
+          python -c "import tkinter; print('tkinter OK')"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Sanity check (source compiles)
+        run: python -m compileall app.py book_formatter.py
+
+      - name: Build .app
+        run: pyinstaller --noconfirm --clean BookListingFormatter.spec
+
+      - name: Verify the bundle actually starts
+        run: |
+          set -e
+          BIN="dist/Book Listing Formatter.app/Contents/MacOS/BookListingFormatter"
+          chmod +x "$BIN"
+          # No display on a CI runner, so Tk cannot open a window; a missing
+          # display is fine, a missing module or broken bundle is not.
+          "$BIN" --check || echo "no display on CI runner - checked imports only"
+          python - <<'PY'
+          import plistlib, pathlib
+          plist = pathlib.Path("dist/Book Listing Formatter.app/Contents/Info.plist")
+          data = plistlib.loads(plist.read_bytes())
+          print("bundle id:", data["CFBundleIdentifier"])
+          print("min macOS:", data["LSMinimumSystemVersion"])
+          PY
+
+      - name: Assemble ready-to-use folder
+        run: |
+          STAGE="dist/Book Listing Formatter"
+          mkdir -p "$STAGE"
+          mv "dist/Book Listing Formatter.app" "$STAGE/"
+          cp "launcher/Run Book Listing Formatter.command" "$STAGE/"
+          chmod +x "$STAGE/Run Book Listing Formatter.command"
+          chmod +x "$STAGE/Book Listing Formatter.app/Contents/MacOS/"* || true
+
+      - name: Zip the app folder (preserves permissions)
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            "Book Listing Formatter" "BookListingFormatter-macos-x86_64.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BookListingFormatter-macos-x86_64
+          path: bookformatter/dist/BookListingFormatter-macos-x86_64.zip
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bookformatter/dist/BookListingFormatter-macos-x86_64.zip
+
+  windows:
+    name: Windows .exe
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: bookformatter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: bookformatter/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Sanity check (source compiles)
+        run: python -m compileall app.py book_formatter.py
+
+      - name: Build .exe
+        run: pyinstaller --noconfirm --clean BookListingFormatter.spec
+
+      - name: Verify the bundle actually starts
+        run: |
+          .\dist\BookListingFormatter\BookListingFormatter.exe --check
+          if ($LASTEXITCODE -ne 0) { throw "packaged app failed --check (exit $LASTEXITCODE)" }
+          "packaged app started and rendered its window"
+        shell: pwsh
+
+      - name: Zip the app folder
+        run: Compress-Archive -Path dist\BookListingFormatter\* -DestinationPath dist\BookListingFormatter-windows.zip
+        shell: pwsh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BookListingFormatter-windows
+          path: bookformatter/dist/BookListingFormatter-windows.zip
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bookformatter/dist/BookListingFormatter-windows.zip

@@ -1,0 +1,3 @@
+# Only needed on a machine that packages the app.
+-r requirements.txt
+pyinstaller>=6.0
