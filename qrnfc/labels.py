@@ -3,8 +3,14 @@
 Data-driven and extendable: adding a language = adding an entry (ideally via the
 shared ``config.xlsx`` ``labels`` tab, which overrides these built-in defaults).
 
-Only DE and FR are verified against the sample CSV. IT / ES / EN strings are
-placeholders and MUST be confirmed with the client (open question #5).
+DE, FR and IT are verified against real orders (IT confirmed 2026-08 from
+processed-parcels-20260801-174518.csv — see the two ``per recensioni`` link
+variants below, and note real IT notes use a curly apostrophe (’) in
+"dell’azienda", not a straight one; matching is quote-insensitive, see
+``csv_parser._normalize``, so future label additions don't need to special-case
+this by hand). ES / EN strings are still placeholders and MUST be confirmed
+with the client (open question #5) — do not assume they're right just because
+the IT ones turned out to need fixing.
 """
 from __future__ import annotations
 
@@ -26,12 +32,16 @@ DEFAULT_LABELS: dict[str, dict[str, list[str]]] = {
         "link": ["Lien vers vos avis Google (optionnel):"],
         "material": ["Matériau:"],
     },
-    # --- PLACEHOLDERS — confirm with client ---
+    # Confirmed 2026-08 against real orders (processed-parcels-20260801-174518.csv).
+    # Company/address apostrophe form doesn't matter (see module docstring); the
+    # original "alla recensione" link guess was simply wrong wording and is kept
+    # only as a fallback in case an older/different order used it.
     "IT": {
         "language": ["Seleziona una lingua:"],
         "company": ["Nome dell'azienda:"],
         "address": ["Indirizzo dell'azienda:"],
-        "link": ["Link diretto alla recensione Google (opzionale):"],
+        "link": ["Link diretto per recensioni Google (opzionale):",
+                 "Link diretto alla recensione Google (opzionale):"],
         "material": ["Materiale:"],
     },
     "ES": {

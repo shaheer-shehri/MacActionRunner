@@ -19,6 +19,21 @@ ORDER_COLUMN = "order_number"
 QTY_COLUMN = "item_quantity"
 TRACKING_COLUMN = "tracking_numbers"
 
+# Customers' checkout forms render apostrophes/quotes typographically (’ “ ”)
+# in some locales and plainly (' " ") in others — e.g. the IT form uses
+# "dell’azienda" (curly) while the label was written with a straight one. Fold
+# both forms together before matching so this doesn't have to be special-cased
+# per label/language (previously bit IT; would silently bite ES/EN too).
+_QUOTE_FOLD = str.maketrans({
+    "‘": "'", "’": "'", "‚": "'", "‛": "'",
+    "“": '"', "”": '"', "„": '"', "‟": '"',
+    " ": " ",
+})
+
+
+def _normalize(text: str) -> str:
+    return text.translate(_QUOTE_FOLD)
+
 
 def read_orders(csv_path: str, labels: Optional[dict] = None) -> list[Order]:
     labels = labels or DEFAULT_LABELS
@@ -67,7 +82,7 @@ def _extract_fields(order: Order, labels: dict) -> None:
     for langset in labels.values():
         for field, variants in langset.items():
             for lab in variants:
-                label_to_field.append((lab.lower(), field))
+                label_to_field.append((_normalize(lab).lower(), field))
     label_to_field.sort(key=lambda lf: -len(lf[0]))
 
     values: dict[str, list[str]] = {}
@@ -91,18 +106,19 @@ def _extract_fields(order: Order, labels: dict) -> None:
 
 def _detect_language(lines: Iterable[str], labels: dict) -> Optional[str]:
     for line in lines:
-        low = line.lower()
+        low = _normalize(line).lower()
         for lang, fields in labels.items():
             for lab in fields.get("language", []):
-                if low.startswith(lab.lower()):
-                    value = line[len(lab):].strip().lower()
+                lab_norm = _normalize(lab).lower()
+                if low.startswith(lab_norm):
+                    value = low[len(lab_norm):].strip()
                     # value like "Deutsch" -> DE; fall back to label's own language
                     return LANGUAGE_NAME_TO_CODE.get(value, lang)
     return None
 
 
 def _match_label(line: str, label_to_field: list[tuple[str, str]]):
-    low = line.lower()
+    low = _normalize(line).lower()
     for lab, field in label_to_field:
         if low.startswith(lab):
             return field, line[len(lab):].strip()
