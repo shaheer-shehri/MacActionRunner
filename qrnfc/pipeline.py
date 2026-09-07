@@ -10,7 +10,7 @@ import re
 import shutil
 from typing import Callable, Optional
 
-from . import csv_parser, variants
+from . import csv_parser, link_export, variants
 from .address_labels import Label, build_label_pdf
 from .config import AppConfig
 from .matching import address_matches
@@ -31,6 +31,7 @@ def _looks_like_place_id(s: str) -> bool:
 # manual_cb(order) -> link string | "" (empty = leave unresolved)
 ManualCb = Callable[[Order], str]
 ProgressCb = Callable[[int, int, Order], None]
+LogCb = Callable[[str], None]
 
 
 def resolve_link(order: Order, cfg: AppConfig, places: Optional[PlacesClient],
@@ -212,7 +213,8 @@ def _assign_sign_groups(orders: list[Order]) -> None:
 
 
 def run_batch(orders: list[Order], cfg: AppConfig, places, manual_cb,
-              progress_cb: ProgressCb = lambda *a: None, resolver=http_resolver):
+              progress_cb: ProgressCb = lambda *a: None, resolver=http_resolver,
+              log_cb: LogCb = lambda msg: None):
     _assign_sign_groups(orders)
     unresolved: list[Order] = []
     total = len(orders)
@@ -239,7 +241,23 @@ def run_batch(orders: list[Order], cfg: AppConfig, places, manual_cb,
         progress_cb(i, total, order)
 
     _generate_labels(orders, cfg)
+    _export_links(orders, cfg, log_cb)
     return unresolved
+
+
+def _export_links(orders: list[Order], cfg: AppConfig, log_cb: LogCb) -> None:
+    """Write the NFC-writing worklist (order -> company -> link to encode)."""
+    rows = link_export.rows_from_orders(orders)
+    if not rows:
+        return
+    try:
+        written = link_export.write_csv(
+            os.path.join(cfg.output_root, link_export.FILENAME), rows)
+        n_open = sum(1 for r in rows if not r.link)
+        msg = f"Link list: {os.path.basename(written)} ({len(rows)} rows"
+        log_cb(msg + (f", {n_open} without a link)" if n_open else ")"))
+    except Exception as e:                  # never fail a batch over the worklist
+        log_cb(f"link list failed: {e}")
 
 
 def _generate_labels(orders: list[Order], cfg: AppConfig) -> None:

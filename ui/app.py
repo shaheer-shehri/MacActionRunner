@@ -19,7 +19,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from qrnfc import bootstrap
 from qrnfc import config as cfg_mod
-from qrnfc import csv_parser, variants
+from qrnfc import csv_parser, link_export, variants
 from qrnfc.models import LinkSource, Order
 from qrnfc.pipeline import run_batch
 from qrnfc.places import PlacesClient
@@ -75,6 +75,7 @@ class App(tk.Tk):
         self.run_btn = ttk.Button(actions, text="Run", command=self._run, state="disabled")
         self.run_btn.pack(side="left", padx=6)
         ttk.Button(actions, text="Open output folder", command=self._open_output).pack(side="left")
+        ttk.Button(actions, text="Open link list", command=self._open_links).pack(side="left", padx=6)
         self.count_lbl = ttk.Label(actions, text="")
         self.count_lbl.pack(side="right")
 
@@ -188,7 +189,8 @@ class App(tk.Tk):
 
         try:
             unresolved = run_batch(self.orders, cfg, places, manual_cb=self._manual,
-                                   progress_cb=progress_cb)
+                                   progress_cb=progress_cb,
+                                   log_cb=lambda m: self._ui_q.put(("log", m)))
             self._ui_q.put(("done", unresolved))
         except Exception as e:
             self._ui_q.put(("log", f"ERROR: {e}"))
@@ -248,12 +250,26 @@ class App(tk.Tk):
         if not self.output_root or not os.path.isdir(self.output_root):
             messagebox.showinfo("No output", "Nothing generated yet.")
             return
+        self._reveal(self.output_root)
+
+    def _open_links(self):
+        """Open the NFC-writing worklist (links.csv) in the default app."""
+        path = os.path.join(self.output_root or "", link_export.FILENAME)
+        if not os.path.isfile(path):
+            messagebox.showinfo("No link list",
+                                "Run a batch first — the link list is written "
+                                "alongside the print files.")
+            return
+        self._reveal(path)
+
+    @staticmethod
+    def _reveal(path: str):
         if sys.platform == "win32":
-            os.startfile(self.output_root)  # noqa
+            os.startfile(path)  # noqa
         elif sys.platform == "darwin":
-            subprocess.run(["open", self.output_root])
+            subprocess.run(["open", path])
         else:
-            subprocess.run(["xdg-open", self.output_root])
+            subprocess.run(["xdg-open", path])
 
     def _emit(self, msg: str):
         self.log.insert("end", msg + "\n")
