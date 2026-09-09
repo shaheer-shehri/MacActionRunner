@@ -19,7 +19,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from qrnfc import bootstrap
 from qrnfc import config as cfg_mod
-from qrnfc import csv_parser, link_export, variants
+from qrnfc import csv_parser, link_export, manual_entry, template_registry, variants
 from qrnfc.models import LinkSource, Order
 from qrnfc.pipeline import run_batch
 from qrnfc.places import PlacesClient
@@ -74,8 +74,10 @@ class App(tk.Tk):
         ttk.Button(actions, text="Load CSV…", command=self._load_csv).pack(side="left")
         self.run_btn = ttk.Button(actions, text="Run", command=self._run, state="disabled")
         self.run_btn.pack(side="left", padx=6)
+        ttk.Button(actions, text="New print file…", command=self._manual_order).pack(side="left", padx=6)
         ttk.Button(actions, text="Open output folder", command=self._open_output).pack(side="left")
         ttk.Button(actions, text="Open link list", command=self._open_links).pack(side="left", padx=6)
+        ttk.Button(actions, text="Edit templates", command=self._edit_templates).pack(side="left")
         self.count_lbl = ttk.Label(actions, text="")
         self.count_lbl.pack(side="right")
 
@@ -146,7 +148,7 @@ class App(tk.Tk):
             cfg = cfg_mod.load(self.settings.app_data_folder)
             self.orders = csv_parser.read_orders(path, labels=cfg.labels)
             for o in self.orders:
-                variants.decode_variant(o)
+                variants.decode_variant(o, cfg.colour_codes)
         except Exception as e:
             messagebox.showerror("Load failed", str(e))
             return
@@ -252,6 +254,42 @@ class App(tk.Tk):
             return
         self._reveal(self.output_root)
 
+    def _manual_order(self):
+        """Create one print file by hand (email / eBay orders, no CSV)."""
+        if not self.settings.folder_ok():
+            messagebox.showerror("Folder missing",
+                                 "Set up the app-data folder (config + templates) first.")
+            return
+        try:
+            cfg = cfg_mod.load(self.settings.app_data_folder)
+        except Exception as e:
+            messagebox.showerror("Config error", str(e))
+            return
+        places = None
+        if self.settings.places_api_key:
+            try:
+                places = PlacesClient(self.settings.places_api_key)
+            except Exception as e:
+                self._emit(f"Places disabled: {e}")
+        self.output_root = cfg.output_root
+        dlg = ManualOrderDialog(self, cfg, places)
+        if dlg.created_path:
+            self._emit(f"Created {os.path.basename(dlg.created_path)}")
+
+    def _edit_templates(self):
+        """Open config/templates.csv — the editable variant registry."""
+        if not self.settings.app_data_folder:
+            messagebox.showerror("Folder missing", "Choose an app-data folder first.")
+            return
+        path = template_registry.path_in(self.settings.app_data_folder)
+        if not os.path.isfile(path):
+            try:
+                template_registry.write_default(path)
+            except OSError as e:
+                messagebox.showerror("Could not create", str(e))
+                return
+        self._reveal(path)
+
     def _open_links(self):
         """Open the NFC-writing worklist (links.csv) in the default app."""
         path = os.path.join(self.output_root or "", link_export.FILENAME)
@@ -295,32 +333,61 @@ class ManualDialog(tk.Toplevel):
                   justify="left").grid(row=0, column=0, columnspan=2, sticky="w",
                                        padx=12, pady=(10, 8))
 
-        # Copyable order details (read-only entries)
+        # Copyable order details (read-only entries).
+        # NOTE: insert the text directly instead of using a per-iteration
+        # tk.StringVar — a StringVar bound to a local goes out of scope at the
+        # next loop iteration, CPython frees it, its __del__ unsets the Tcl
+        # variable, and the Entry renders EMPTY. That bug hid the company and
+        # address here, forcing a manual lookup of data the tool already had.
+        self.order = order
         for i, (label, value) in enumerate([
             ("Order number", order.order_number),
             ("Company", order.company),
             ("Address", order.address),
         ], start=1):
             ttk.Label(self, text=label + ":").grid(row=i, column=0, sticky="e", padx=(12, 4))
-            var = tk.StringVar(value=value)
-            e = ttk.Entry(self, textvariable=var, width=64)
-            e.grid(row=i, column=1, sticky="w", padx=(0, 12), pady=1)
+            e = ttk.Entry(self, width=64)
+            e.insert(0, value or "")
             e.configure(state="readonly")
+            e.grid(row=i, column=1, sticky="w", padx=(0, 12), pady=1)
 
-        ttk.Label(self, text="Place ID / link:").grid(row=4, column=0, sticky="e",
+        # Why did it land here? (e.g. "provided link rejected: unrecognized
+        # link format", "places: no candidates"). Without this the operator
+        # can't tell a bad link from a missing API key.
+        why = "; ".join(order.notes) or "no link supplied"
+        ttk.Label(self, text="Reason:").grid(row=4, column=0, sticky="e", padx=(12, 4))
+        ttk.Label(self, text=why, foreground="#9a6700", wraplength=430,
+                  justify="left").grid(row=4, column=1, sticky="w", padx=(0, 12))
+
+        ttk.Label(self, text="Place ID / link:").grid(row=5, column=0, sticky="e",
                                                       padx=(12, 4), pady=(8, 0))
         self.entry = ttk.Entry(self, width=64)
-        self.entry.grid(row=4, column=1, sticky="w", padx=(0, 12), pady=(8, 0))
+        self.entry.grid(row=5, column=1, sticky="w", padx=(0, 12), pady=(8, 0))
         self.entry.focus_set()
 
         row = ttk.Frame(self)
-        row.grid(row=5, column=0, columnspan=2, pady=10)
+        row.grid(row=6, column=0, columnspan=2, pady=10)
+        ttk.Button(row, text="Search on Google", command=self._search).pack(side="left", padx=4)
+        ttk.Button(row, text="Place ID Explorer", command=self._explorer).pack(side="left", padx=4)
         ttk.Button(row, text="Use", command=self._ok).pack(side="left", padx=4)
         ttk.Button(row, text="Skip", command=self._skip).pack(side="left", padx=4)
         self.bind("<Return>", lambda _e: self._ok())
         self.grab_set()
         self.transient(master)
         self.wait_window()
+
+    def _search(self):
+        """Open a Google search for the parsed company + address, so the
+        operator doesn't have to retype data the tool already parsed."""
+        import urllib.parse
+        import webbrowser
+        q = " ".join(x for x in (self.order.company, self.order.address) if x)
+        webbrowser.open("https://www.google.com/search?q=" + urllib.parse.quote(q))
+
+    def _explorer(self):
+        import webbrowser
+        webbrowser.open("https://developers.google.com/maps/documentation/"
+                        "javascript/examples/places-placeid-finder")
 
     def _ok(self):
         self.result = self.entry.get().strip()
@@ -329,6 +396,122 @@ class ManualDialog(tk.Toplevel):
     def _skip(self):
         self.result = ""
         self.destroy()
+
+
+class ManualOrderDialog(tk.Toplevel):
+    """Create a single print file without a CSV (email / eBay / phone orders).
+
+    The variant dropdown is populated from the editable registry
+    (config/templates.csv), so a variant the client adds there appears here
+    with no code change.
+    """
+
+    def __init__(self, master, cfg, places=None):
+        super().__init__(master)
+        self.title("New print file")
+        self.cfg = cfg
+        self.places = places
+        self.created_path = ""
+        self.resizable(False, False)
+
+        langs = sorted({d for d in os.listdir(cfg.templates_root)
+                        if os.path.isdir(os.path.join(cfg.templates_root, d))})             if os.path.isdir(cfg.templates_root) else ["DE"]
+        codes = list(cfg.colour_codes)
+
+        # Keep every StringVar on self: a Var bound only to a local is garbage
+        # collected, which silently blanks the widget bound to it.
+        self.vars = {}
+        row = 0
+
+        def field(label, key, default=""):
+            nonlocal row
+            ttk.Label(self, text=label).grid(row=row, column=0, sticky="e", padx=(12, 4), pady=3)
+            v = tk.StringVar(value=default)
+            self.vars[key] = v
+            ttk.Entry(self, textvariable=v, width=52).grid(
+                row=row, column=1, sticky="w", padx=(0, 12), pady=3)
+            row += 1
+
+        def combo(label, key, values, default):
+            nonlocal row
+            ttk.Label(self, text=label).grid(row=row, column=0, sticky="e", padx=(12, 4), pady=3)
+            v = tk.StringVar(value=default)
+            self.vars[key] = v
+            ttk.Combobox(self, textvariable=v, values=values, state="readonly",
+                         width=20).grid(row=row, column=1, sticky="w", padx=(0, 12), pady=3)
+            row += 1
+
+        ttk.Label(self, text="Creates one print file and adds it to the link list.",
+                  foreground="#57606a").grid(row=row, column=0, columnspan=2,
+                                             sticky="w", padx=12, pady=(10, 6))
+        row += 1
+
+        field("Reference (name / order ID):", "reference")
+        combo("Language:", "language", langs, langs[0] if langs else "DE")
+        combo("Shape:", "shape", sorted(variants.SHAPES), "D02")
+        combo("Variant:", "code", codes, codes[0] if codes else "BLK")
+        combo("Size:", "size", sorted(variants.SIZES), "A5")
+        field("Company:", "company")
+        field("Address:", "address")
+        field("Place ID / review link (optional):", "link")
+        field("Material (optional, e.g. Eiche):", "material")
+
+        self.status = ttk.Label(self, text="", foreground="#57606a", wraplength=430,
+                                justify="left")
+        self.status.grid(row=row, column=0, columnspan=2, sticky="w", padx=12)
+        row += 1
+
+        bar = ttk.Frame(self)
+        bar.grid(row=row, column=0, columnspan=2, pady=10)
+        self.create_btn = ttk.Button(bar, text="Create print file", command=self._create)
+        self.create_btn.pack(side="left", padx=4)
+        ttk.Button(bar, text="Close", command=self.destroy).pack(side="left", padx=4)
+
+        self.grab_set()
+        self.transient(master)
+        self.wait_window()
+
+    def _get(self, key):
+        return self.vars[key].get().strip()
+
+    def _create(self):
+        if not self._get("reference"):
+            self.status.config(text="A reference is required — it becomes the filename.",
+                               foreground="#cf222e")
+            return
+        if not self._get("company") and not self._get("link"):
+            self.status.config(text="Enter a company (for the Places lookup) or a "
+                                    "Place ID / review link.", foreground="#cf222e")
+            return
+
+        self.create_btn.config(state="disabled")
+        self.status.config(text="Resolving link and rendering…", foreground="#57606a")
+        self.update_idletasks()
+        try:
+            order = manual_entry.create(
+                reference=self._get("reference"),
+                language=self._get("language"),
+                shape=self._get("shape"),
+                code=self._get("code"),
+                size=self._get("size"),
+                company=self._get("company"),
+                address=self._get("address"),
+                cfg=self.cfg,
+                places=self.places,
+                link=self._get("link"),
+                material_text=self._get("material"),
+            )
+        except Exception as e:
+            self.status.config(text=f"Failed: {e}", foreground="#cf222e")
+            self.create_btn.config(state="normal")
+            return
+
+        self.created_path = order.output_path
+        self.status.config(
+            text=f"Created {os.path.basename(order.output_path)}  "
+                 f"(link source: {order.link_source.value})", foreground="#1a7f37")
+        self.create_btn.config(state="normal")
+
 
 
 def main():
