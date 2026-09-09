@@ -16,6 +16,7 @@ import json
 import os
 from dataclasses import dataclass, field
 
+from . import template_registry
 from .labels import DEFAULT_LABELS
 from .qr import QRBox
 
@@ -37,6 +38,13 @@ class AppConfig:
     white_behind_qr: bool = True
     # colour codes whose QR must be WHITE ink (dark materials): black acrylic, HDF
     white_qr_colours: tuple = ("BLK", "HDF")
+    # Editable variant registry (config/templates.csv) — see template_registry.
+    variants: list = field(default_factory=template_registry.default_variants)
+
+    @property
+    def colour_codes(self) -> tuple:
+        """Every variant code the tool accepts, from the registry."""
+        return template_registry.codes(self.variants)
 
     @property
     def templates_root(self) -> str:
@@ -65,12 +73,32 @@ def load(root: str) -> AppConfig:
             page_w_pt=v["page_w_pt"], page_h_pt=v["page_h_pt"],
         )
 
+    # Create the registry on first sight so it shows up in existing installs
+    # without the client having to re-run "Set up folder". Never overwrites.
+    try:
+        template_registry.write_default(template_registry.path_in(root))
+    except OSError:
+        pass
+    variants = template_registry.load(root)
+
+    # The registry is authoritative for QR ink — otherwise editing the table
+    # would have no effect, which is the whole point of it. Behaviour is
+    # unchanged on upgrade because the shipped defaults (BLK/HDF white,
+    # WHT/TRP black) are exactly what settings.json already said.
+    # settings.json's "white_qr_colours" is retained only as a legacy override
+    # for a folder that has been hand-edited away from those defaults.
+    white = template_registry.white_qr_codes(variants)
+    legacy = settings.get("white_qr_colours")
+    if legacy is not None and set(legacy) != {"BLK", "HDF"}:
+        white = tuple(legacy)
+
     return AppConfig(
         root=root, labels=labels, layouts=layouts,
         spot_name=settings.get("spot_name", "Spot_Weiss"),
         overprint=settings.get("overprint", True),
         white_behind_qr=settings.get("white_behind_qr", True),
-        white_qr_colours=tuple(settings.get("white_qr_colours", ("BLK", "HDF"))),
+        white_qr_colours=white,
+        variants=variants,
     )
 
 

@@ -14,6 +14,8 @@ from typing import Optional
 from .models import Order, Variant
 
 SHAPES = {"D01", "D02"}
+# Fallback only — the live list comes from config/templates.csv via
+# AppConfig.colour_codes, so a new variant needs no code change.
 COLOURS = {"BLK", "TRP", "WHT", "HDF"}
 SIZES = {"A5", "A6"}
 
@@ -29,11 +31,23 @@ MATERIAL_CODES = {
     "WNT": ["walnuss", "nussbaum", "walnut", "noyer", "noce", "nogal", "noce nazionale"],
 }
 
-_SKU_RE = re.compile(r"(D0\d)[_-]?(BLK|TRP|WHT|HDF)[_-]?(A\d)", re.IGNORECASE)
+def sku_regex(codes=None) -> "re.Pattern":
+    """SKU matcher built from the registry's variant codes.
+
+    Longest code first so a longer code wins over one that is a prefix of it
+    (e.g. adding "BL" alongside "BLK" must not shadow "BLK").
+    """
+    codes = tuple(codes or COLOURS)
+    alt = "|".join(re.escape(c) for c in sorted(codes, key=len, reverse=True))
+    return re.compile(rf"(D0\d)[_-]?({alt})[_-]?(A\d)", re.IGNORECASE)
 
 
-def decode_variant(order: Order) -> Optional[Variant]:
-    m = _SKU_RE.search(order.sku.upper())
+_SKU_RE = sku_regex()
+
+
+def decode_variant(order: Order, codes=None) -> Optional[Variant]:
+    rx = sku_regex(codes) if codes else _SKU_RE
+    m = rx.search(order.sku.upper())
     if not m or not order.language:
         order.log(f"cannot decode SKU '{order.sku}' (lang={order.language})")
         return None

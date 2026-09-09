@@ -219,7 +219,7 @@ def run_batch(orders: list[Order], cfg: AppConfig, places, manual_cb,
     unresolved: list[Order] = []
     total = len(orders)
     for i, order in enumerate(orders, 1):
-        variants.decode_variant(order)
+        variants.decode_variant(order, cfg.colour_codes)
         if not order.emits_file:      # identical duplicate row -> merged into one file
             order.log(f"identical sign, merged into the {order.file_prefix} file")
             progress_cb(i, total, order)

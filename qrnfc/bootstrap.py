@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 
+from . import template_registry
 from .labels import DEFAULT_LABELS
 
 LANGS = ["DE", "EN", "ES", "FR", "IT"]
@@ -52,6 +53,9 @@ def scaffold(root: str) -> list[str]:
     _write_default(os.path.join(cfg_dir, "labels.json"), DEFAULT_LABELS, actions, root)
     _write_default(os.path.join(cfg_dir, "variants.json"), DEFAULT_VARIANTS, actions, root)
     _write_default(os.path.join(cfg_dir, "settings.json"), DEFAULT_SETTINGS, actions, root)
+    # Editable variant registry (client adds new stand variants here).
+    if template_registry.write_default(os.path.join(cfg_dir, template_registry.FILENAME)):
+        actions.append(f"wrote config/{template_registry.FILENAME}")
     return actions
 
 

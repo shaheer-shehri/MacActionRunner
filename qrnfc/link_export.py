@@ -87,3 +87,19 @@ def _write(path: str, rows: list[LinkRow]) -> str:
         for r in rows:
             w.writerow(r.as_record())
     return path
+
+
+def append_rows(path: str, rows: list[LinkRow]) -> str:
+    """Append to an existing worklist (used by manually-created print files),
+    writing the header first if the file isn't there yet."""
+    if not os.path.isfile(path):
+        return write_csv(path, rows)
+    try:
+        with open(path, "a", newline="", encoding="utf-8-sig") as fh:
+            w = csv.writer(fh, delimiter=DELIMITER, quoting=csv.QUOTE_MINIMAL)
+            for r in rows:
+                w.writerow(r.as_record())
+        return path
+    except PermissionError:                 # open in Excel — don't lose the row
+        stem, ext = os.path.splitext(path)
+        return _write(f"{stem}_{datetime.now():%Y%m%d-%H%M%S}{ext}", rows)
