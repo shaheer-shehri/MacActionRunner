@@ -10,7 +10,7 @@ import re
 import shutil
 from typing import Callable, Optional
 
-from . import csv_parser, link_export, variants
+from . import csv_parser, link_export, order_export, variants
 from .address_labels import Label, build_label_pdf
 from .config import AppConfig
 from .matching import address_matches
@@ -18,14 +18,12 @@ from .models import LinkSource, Order
 from .places import PlaceCandidate, PlacesClient
 from .qr import compose
 from .pdf_export import build_pdf
-from .review_link import canonicalize, http_resolver, link_from_place_id
+from .review_link import (canonicalize, http_resolver, link_from_place_id,
+                          looks_like_place_id)
 
-# A bare Google Place ID (no URL): long token of letters/digits/-/_ .
-_PLACE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{15,}$")
-
-
-def _looks_like_place_id(s: str) -> bool:
-    return not s.lower().startswith("http") and bool(_PLACE_ID_RE.match(s))
+# Kept as a module-level name: the Place-ID test now lives with the rest of the
+# link logic in review_link.
+_looks_like_place_id = looks_like_place_id
 
 # UI callbacks -------------------------------------------------------------
 # manual_cb(order) -> link string | "" (empty = leave unresolved)
@@ -36,8 +34,20 @@ LogCb = Callable[[str], None]
 
 def resolve_link(order: Order, cfg: AppConfig, places: Optional[PlacesClient],
                  manual_cb: ManualCb, resolver=None) -> None:
-    # 1. Customer-provided direct review link (recognized by pattern).
+    # 1. Customer-provided direct review link (recognized by pattern), or a
+    #    bare Place ID sitting in the link field. The ID case matters because
+    #    the "New print file" dialog feeds its "Place ID / review link" box in
+    #    here: before, only a complete link worked and a pasted ID was thrown
+    #    away with "no url in text". ``strict`` guards against reading a
+    #    customer's one-word company name as an ID (see looks_like_place_id).
     if order.provided_link:
+        if looks_like_place_id(order.provided_link, strict=True):
+            pid = order.provided_link.strip()
+            order.place_id = pid
+            order.final_link = link_from_place_id(pid)
+            order.link_source = LinkSource.PROVIDED
+            order.log("used the Place ID supplied in the link field")
+            return
         res = canonicalize(order.provided_link, resolver=resolver)
         if res.valid:
             order.final_link = res.canonical
@@ -131,17 +141,29 @@ def render_order(order: Order, cfg: AppConfig) -> str:
 
 
 def _base_name(order: Order) -> str:
-    """<lang>_<SKU>_<tracking>_<material> (material omitted if none)."""
+    """``<lang>_<SKU>_<tracking>_<material>-<country>``.
+
+    Two different languages appear in one name, on purpose:
+      * ``lang``    - the sign language the customer ORDERED (the template).
+      * ``country`` - the marketplace the order came from (the note's form
+                      language), so a cross-language order is obvious at a
+                      glance: ``1x_EN_..._OAK-FR`` is an English sign bought on
+                      the French marketplace.
+
+    ``material-country`` is one trailing field. When the material has no code
+    (plain MDF) the field is just the country, so the last segment is always
+    the country rather than a dangling separator.
+    """
     lang = order.language or (order.variant.language if order.variant else "")
-    parts = [lang, order.sku, order.tracking]
-    if order.variant and order.variant.material_code:
-        parts.append(order.variant.material_code)
+    material = order.variant.material_code if order.variant else ""
+    tail = "-".join(p for p in (material, order.form_language or "") if p)
+    parts = [lang, order.sku, order.tracking, tail]
     stem = "_".join(p for p in parts if p)
     return "".join(c for c in stem if c.isalnum() or c in "-_").strip("_")
 
 
 def _out_name(order: Order) -> str:
-    """<prefix>_<lang>_<SKU>_<tracking>_<material>.pdf — prefix set by
+    """<prefix>_<lang>_<SKU>_<tracking>_<material>-<country>.pdf — prefix set by
     _assign_sign_groups ("1x"/"2x" for identical signs, "A1"/"A2" when the order
     needs genuinely different print files)."""
     return f"{order.file_prefix}_{_base_name(order)}.pdf"
@@ -242,6 +264,7 @@ def run_batch(orders: list[Order], cfg: AppConfig, places, manual_cb,
 
     _generate_labels(orders, cfg)
     _export_links(orders, cfg, log_cb)
+    _export_orders(orders, cfg, log_cb)
     return unresolved
 
 
@@ -258,6 +281,24 @@ def _export_links(orders: list[Order], cfg: AppConfig, log_cb: LogCb) -> None:
         log_cb(msg + (f", {n_open} without a link)" if n_open else ")"))
     except Exception as e:                  # never fail a batch over the worklist
         log_cb(f"link list failed: {e}")
+
+
+def _export_orders(orders: list[Order], cfg: AppConfig, log_cb: LogCb) -> None:
+    """Write the per-order export file (the client's data contract)."""
+    rows = order_export.rows_from_orders(orders)
+    if not rows:
+        return
+    try:
+        written = order_export.write_csv(
+            os.path.join(cfg.output_root, order_export.FILENAME), rows)
+        n_blank = sum(1 for r in rows if not r.recipient)
+        msg = f"Export file: {os.path.basename(written)} ({len(rows)} orders"
+        # The recipient is not in the shipping export yet; say so once per run
+        # rather than letting an empty column look like a bug.
+        log_cb(msg + (f", {n_blank} without a recipient — the CSV has no "
+                      f"ship-to column)" if n_blank else ")"))
+    except Exception as e:              # never fail a batch over the export
+        log_cb(f"export file failed: {e}")
 
 
 def _generate_labels(orders: list[Order], cfg: AppConfig) -> None:

@@ -14,6 +14,10 @@ the IT ones turned out to need fixing.
 """
 from __future__ import annotations
 
+import re
+import unicodedata
+from typing import Optional
+
 # field -> list of accepted label prefixes (case-insensitive, matched at line start)
 DEFAULT_LABELS: dict[str, dict[str, list[str]]] = {
     "DE": {
@@ -60,11 +64,66 @@ DEFAULT_LABELS: dict[str, dict[str, list[str]]] = {
     },
 }
 
-# Value written on the language line -> canonical language code.
-LANGUAGE_NAME_TO_CODE: dict[str, str] = {
-    "deutsch": "DE", "german": "DE",
-    "français": "FR", "francais": "FR", "french": "FR",
-    "italiano": "IT", "italian": "IT",
-    "español": "ES", "espanol": "ES", "spanish": "ES",
-    "english": "EN", "englisch": "EN",
+# Sign-language options AS WRITTEN IN EACH FORM LANGUAGE (the 5x5 matrix).
+#
+# A checkout form in language F lists the sign options in F's own words, so a
+# French customer who picks an English sign sends "Anglais" -- not "English".
+# Detecting the ORDERED sign language therefore needs every language's name in
+# every language, not just each language's name in its own tongue.
+#
+# The old map held only 12 names (each language in itself, plus the English
+# names). Every cross-language combination it was missing fell through to the
+# FORM's language, which printed the wrong template: a French form + English
+# sign came out French. Keep all five columns filled when adding a language.
+#
+#                   as written in:  DE            EN          ES          FR           IT
+LANGUAGE_NAMES: dict[str, list[str]] = {
+    "DE": ["Deutsch",      "German",   "Alemán",   "Allemand",  "Tedesco"],
+    "EN": ["Englisch",     "English",  "Inglés",   "Anglais",   "Inglese"],
+    "ES": ["Spanisch",     "Spanish",  "Español",  "Espagnol",  "Spagnolo"],
+    "FR": ["Französisch", "French", "Francés", "Français", "Francese"],
+    "IT": ["Italienisch",  "Italian",  "Italiano",  "Italien",   "Italiano"],
 }
+
+
+def fold(value: str) -> str:
+    """Accent- and punctuation-insensitive key for a language value.
+
+    "Inglés", "INGLES" and "ingles " all fold to "ingles", so the matrix above
+    can be written with its natural spelling while still matching whatever the
+    form actually sent.
+    """
+    s = (value or "").lower().replace("ß", "ss")
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", " ", s).strip()
+
+
+# Folded language name -> canonical code, derived from the matrix above.
+LANGUAGE_NAME_TO_CODE: dict[str, str] = {
+    fold(name): code for code, names in LANGUAGE_NAMES.items() for name in names
+}
+
+
+def language_code_for(value: str) -> Optional[str]:
+    """Map a selected sign-language value to its code, or None if unknown.
+
+    Exact match first, then the longest matching prefix so a decorated value
+    ("Deutsch / German", "Italiano (IT)") still resolves. The prefix step is
+    safe because no two names in the matrix share a prefix while pointing at
+    different codes ("italien"/"italienisch"/"italiano" are all IT).
+
+    Returning None rather than guessing is deliberate: the caller must be able
+    to tell "the customer picked Spanish" from "we could not tell", because
+    falling back silently is what printed wrong-language signs.
+    """
+    v = fold(value)
+    if not v:
+        return None
+    code = LANGUAGE_NAME_TO_CODE.get(v)
+    if code:
+        return code
+    for name in sorted(LANGUAGE_NAME_TO_CODE, key=len, reverse=True):
+        if v.startswith(name):
+            return LANGUAGE_NAME_TO_CODE[name]
+    return None

@@ -78,14 +78,51 @@ behind it (i.e. painted into the Spot White mask). _(Open Q: confirm white-behin
   un-inked ring** at the anti-aliased window edge.
 - MediaBox matches the template (D02_A5 = 522.904 × 595.274 pt ≈ 184.4 × 210 mm).
 - Built with **pikepdf**, mirroring the structure of the supplied finished PDFs.
-- **Output filename** = `<qty>x_<SKU>_<tracking>_<material>.pdf`
-  (material = OAK / WNT, omitted for plain MDF). Fields: `item_quantity`,
-  `item_sku`, `tracking_numbers`, and the `Material:` note line.
-  Example: `1x_NFC_D02_WHT-A5_00340434888052019115_OAK.pdf`.
+- **Output filename** = `<prefix>_<lang>_<SKU>_<tracking>_<material>-<country>.pdf`
+  (material = OAK / WNT, omitted for plain MDF; with no material the trailing
+  field is just the country). Fields: `item_quantity`, `item_sku`,
+  `tracking_numbers`, the `Material:` note line, the **selected sign language**
+  and the **form language** as the country.
+  Example: `1x_EN_NFC_D02_WHT-A5_00340434888052019115_OAK-FR.pdf`
+  — an English sign bought on the French marketplace.
+  Country source confirmed with the client 2026-11-09: the marketplace/form
+  language, since the Amazon export carries no country column
+  (`integration_account_name` and `carrier_account_name` are constants and
+  `shipping_method_name` only separates "DE" from "international").
 - **On-screen preview note:** normal PDF viewers show a solid white page because
   the Spot_Weiss separation renders as opaque paper-white on top; this is expected
   and does not affect print (verify via the RIP separation view or Acrobat
   "Overprint Preview"). An optional soft-mask preview mode can be added if desired.
+
+## 6b. Per-order export file (data contract, 2026-11-09)
+
+`output/export.csv` — ONE ROW PER ORDER, alongside (not replacing) the
+per-print-file `links.csv`:
+
+| Field | Purpose |
+|---|---|
+| Order number | unique match key |
+| Recipient | DHL ship-to / Amazon orderer — **not** necessarily the reviewed business |
+| Business name | the company the review link / Place ID points at, printed on the sign |
+| Link | review / Place-ID link, identical to the printed QR |
+| Tracking number | matches the DHL shipping label |
+| Filename | which sign is being handled |
+
+Semicolon-separated, UTF-8 with BOM (as `links.csv`). Multi-sign orders keep one
+row, values joined with `" | "` in sign order.
+
+★ **BLOCKED — Recipient is not available.** The shipping export carries no
+ship-to/buyer column (verified across all five sample CSVs, incl.
+`_processed-parcels-20261105-085045.csv`, whose only new column is
+`packaging_name`). The client's own hand-named sample files prove they have the
+data ("DE_D02_TRP_A5_ OAK **Andreas Fercher** Lastenrad.pdf" for business
+"Lastenrad Manufaktur"), so it must be added to the export.
+`csv_parser.RECIPIENT_COLUMNS` already accepts the usual spellings, so no code
+change is needed once it appears.
+
+Note: the contract's example value for "Order number" (`00340434888052019115`)
+is a tracking number; the real `order_number` (e.g. `304-8919424-5506734`) is
+used, as "unique match key" implies. Confirm if that was intentional.
 
 ## 7. Configuration & template store (no API keys)
 
@@ -137,6 +174,15 @@ unresolved list → PDFs written to output folder. No per-candidate confirmation
    (kgmid) links are not usable directly and route through (b) / manual.
 2. **White backing layer** — the finished samples had a 2nd near-white RGB layer
    (`Im1`); RIP works without reproducing it, but confirm it isn't required.
-3. Full **label strings for IT, ES, EN** (DE/FR verified); confirm note is always
-   labelled.
+3. Full **label strings for ES, EN** (DE/FR/IT verified against real orders);
+   confirm note is always labelled.
+5. ✅ RESOLVED 2026-11-09 — **sign language vs. marketplace**: the template follows
+   the language the customer SELECTED, never the form's language. Needs every
+   language's name in every language (`labels.LANGUAGE_NAMES`, 5×5); an
+   unrecognised value now falls back with a logged warning instead of silently
+   printing the form language. All 25 combinations covered by `tests/`.
+6. ✅ RESOLVED 2026-11-09 — **manual Place-ID entry**: the link field and the
+   manual dialog both accept a bare Place ID and build the `writereview` link
+   from it. Customer prose in the CSV link field is still rejected (strict
+   shape test) so a one-word company name cannot become a dead link.
 4. **Confirmation threshold** tuning (currently auto-accept ≥0.85 & single hit).

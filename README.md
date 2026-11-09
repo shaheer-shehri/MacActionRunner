@@ -9,7 +9,7 @@ CSV. See [REQUIREMENTS.md](REQUIREMENTS.md) for the full spec and open questions
 app/
   qrnfc/                 # core library (UI-independent, testable)
     models.py            # Order / Variant / LinkSource
-    labels.py            # multilingual label dictionary (DE/FR verified)
+    labels.py            # label dictionary + 5x5 language-name matrix
     csv_parser.py        # CSV -> Order, extract labelled note fields
     variants.py          # SKU + note -> Variant; resolve template PNG
     review_link.py       # validate / canonicalize Google review links
@@ -21,6 +21,7 @@ app/
     template_registry.py # editable variant table (config/templates.csv)
     manual_entry.py      # build one print file without a CSV
     link_export.py       # NFC-writing worklist (output/links.csv)
+    order_export.py      # per-order export file (output/export.csv)
     pipeline.py          # orchestration (headless; UI plugs in via callbacks)
   ui/
     app.py               # Tkinter front-end skeleton
@@ -76,15 +77,79 @@ above), type the company and address, optionally paste a Place ID or review
 link, and give it a **reference** — a name or order ID, which becomes the
 filename: `<reference>_<lang>_<SKU>[_<material>].pdf`.
 
+The link box accepts **either a bare Place ID or a full review link** — an ID
+is turned into its `writereview` link automatically, which is the fallback for
+when the Places lookup cannot resolve the business from company + address.
+
 With no link supplied it runs the same Places lookup as a batch. The file is
 rendered through the identical render path as CSV orders (same spot channel,
 overprint and QR ink) and is appended to `output/links.csv`.
 
+## Language vs. country
+
+Two separate facts come off the note's language line and they are **not** the
+same thing:
+
+| | from | drives |
+|---|---|---|
+| **sign language** (`order.language`) | the value the customer *selected* | which template is used |
+| **country** (`order.form_language`) | the language of the note's own *labels* | the last part of the filename |
+
+A French customer can order an English sign. The form is French, so its labels
+and its dropdown values are French — the selected value arrives as `Anglais`,
+not `English`. `labels.LANGUAGE_NAMES` therefore holds every language's name in
+every language (the 5×5 matrix); without a name the lookup used to fall back to
+the form's language and print the wrong template. **When adding a language, fill
+in all five columns.** `tests/` covers all 25 combinations.
+
+## Output filename
+
+```
+<prefix>_<lang>_<SKU>_<tracking>_<material>-<country>.pdf
+1x_EN_NFC_D02_BLK-A5_00340434888052019115_OAK-FR.pdf
+   ^^                                     ^^^ ^^
+   sign language ordered                  |   marketplace it was bought on
+                                          material (OAK/WNT, omitted for plain MDF)
+```
+`<prefix>` is `1x`/`2x`/`3x` for an order needing one print file, or `A1`/`A2`…
+when it needs several different ones (see `pipeline._assign_sign_groups`). With
+no material code the trailing field is just the country.
+
 ## Output
 
 - `output/*.pdf` — the print files
-- `output/links.csv` — NFC worklist: order, company, address, link to encode
+- `output/links.csv` — NFC worklist: **one row per print file**, with the number
+  of tags to write. The operator works down it chip by chip.
+- `output/export.csv` — **one row per order**, keyed on the order number. The
+  matching document: which parcel is this, who is it for, which sign is in it.
 - `output/labels/*.pdf` — 10x15 cm packing labels for multi-location orders
+
+### export.csv — the per-order data contract
+
+| Field | Source | Note |
+|---|---|---|
+| Order number | `order_number` | the match key |
+| Recipient | a ship-to column, if the export has one | the Amazon orderer / DHL label — **see below** |
+| Business name | Places-resolved name, else the note's company | the listing the review link points at |
+| Link | the final review link | identical to what the QR encodes |
+| Tracking number | `tracking_numbers` | matches the DHL label |
+| Filename | the generated print file | shows which sign this is |
+
+**Recipient and Business name are different things on purpose**: "Andreas
+Fercher" can order a sign for "Lastenrad Manufaktur", so they are never merged.
+
+**The recipient is not in the shipping export yet.** No column in it holds a
+person: `integration_account_name` and `carrier_account_name` are constants and
+the rest is item data. `csv_parser.RECIPIENT_COLUMNS` therefore accepts any of
+the usual spellings (`recipient`, `ship_to_name`, `buyer_name`, `empfaenger`,
+…, matched ignoring case/spaces/underscores) — the day that column is added to
+the export it is picked up with **no code change**. Until then the cell is
+empty, and each run logs how many rows lack one.
+
+An order needing several different signs still gets **one row**: the
+multi-valued cells list their values in sign order separated by `" | "`, so
+Business name, Link and Filename line up positionally. Values identical across
+the signs collapse to one.
 
 ## Status (validated so far)
 

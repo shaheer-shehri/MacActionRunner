@@ -41,9 +41,21 @@ class Order:
     raw_note: str
     quantity: int = 1
     tracking: str = ""
+    # Who receives the parcel (the Amazon orderer / DHL ship-to). This is NOT
+    # the business being reviewed -- "Andreas Fercher" may order a sign for
+    # "Lastenrad Manufaktur" -- so it is carried separately from `company`.
+    # Empty unless the shipping export actually carries a recipient column
+    # (see csv_parser.RECIPIENT_COLUMNS).
+    recipient: str = ""
 
     # extracted from the note
+    # language = the sign language the customer ORDERED (drives the template).
+    # form_language = the language of the note's own labels, i.e. the
+    #   marketplace the order came from (a German form = a DE/AT/CH customer).
+    # These are NOT the same thing: a French customer may order an English
+    # sign. Keep them apart -- conflating them printed the wrong template.
     language: Optional[str] = None
+    form_language: Optional[str] = None
     company: str = ""
     address: str = ""
     material_text: str = ""

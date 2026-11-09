@@ -19,7 +19,8 @@ from tkinter import filedialog, messagebox, ttk
 
 from qrnfc import bootstrap
 from qrnfc import config as cfg_mod
-from qrnfc import csv_parser, link_export, manual_entry, template_registry, variants
+from qrnfc import (csv_parser, link_export, manual_entry, order_export,
+                   template_registry, variants)
 from qrnfc.models import LinkSource, Order
 from qrnfc.pipeline import run_batch
 from qrnfc.places import PlacesClient
@@ -77,6 +78,7 @@ class App(tk.Tk):
         ttk.Button(actions, text="New print file…", command=self._manual_order).pack(side="left", padx=6)
         ttk.Button(actions, text="Open output folder", command=self._open_output).pack(side="left")
         ttk.Button(actions, text="Open link list", command=self._open_links).pack(side="left", padx=6)
+        ttk.Button(actions, text="Open export file", command=self._open_export).pack(side="left", padx=(0, 6))
         ttk.Button(actions, text="Edit templates", command=self._edit_templates).pack(side="left")
         self.count_lbl = ttk.Label(actions, text="")
         self.count_lbl.pack(side="right")
@@ -300,6 +302,16 @@ class App(tk.Tk):
             return
         self._reveal(path)
 
+    def _open_export(self):
+        """Open the per-order export file (export.csv) in the default app."""
+        path = os.path.join(self.output_root or "", order_export.FILENAME)
+        if not os.path.isfile(path):
+            messagebox.showinfo("No export file",
+                                "Run a batch first — the export file is written "
+                                "alongside the print files.")
+            return
+        self._reveal(path)
+
     @staticmethod
     def _reveal(path: str):
         if sys.platform == "win32":
@@ -441,18 +453,23 @@ class ManualOrderDialog(tk.Toplevel):
                          width=20).grid(row=row, column=1, sticky="w", padx=(0, 12), pady=3)
             row += 1
 
-        ttk.Label(self, text="Creates one print file and adds it to the link list.",
+        ttk.Label(self, text="Creates one print file and adds it to the link list.\n"
+                             "The link box takes a bare Place ID or a full review link.",
                   foreground="#57606a").grid(row=row, column=0, columnspan=2,
                                              sticky="w", padx=12, pady=(10, 6))
         row += 1
 
         field("Reference (name / order ID):", "reference")
-        combo("Language:", "language", langs, langs[0] if langs else "DE")
+        combo("Sign language:", "language", langs, langs[0] if langs else "DE")
         combo("Shape:", "shape", sorted(variants.SHAPES), "D02")
         combo("Variant:", "code", codes, codes[0] if codes else "BLK")
         combo("Size:", "size", sorted(variants.SIZES), "A5")
         field("Company:", "company")
         field("Address:", "address")
+        # Country = the marketplace the order came from; it is the last part of
+        # the filename. Separate from the sign language above, which can differ
+        # (an English sign bought on the French marketplace).
+        combo("Country (marketplace):", "country", langs, langs[0] if langs else "DE")
         field("Place ID / review link (optional):", "link")
         field("Material (optional, e.g. Eiche):", "material")
 
@@ -500,6 +517,7 @@ class ManualOrderDialog(tk.Toplevel):
                 places=self.places,
                 link=self._get("link"),
                 material_text=self._get("material"),
+                country=self._get("country"),
             )
         except Exception as e:
             self.status.config(text=f"Failed: {e}", foreground="#cf222e")

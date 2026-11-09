@@ -64,6 +64,35 @@ def link_from_place_id(place_id: str) -> str:
     return WRITEREVIEW.format(pid=place_id)
 
 
+# A bare Google Place ID (no URL): a long token of letters/digits/-/_ , e.g.
+# "ChIJN1t_tDeuEmsRUsoyG83frY4".
+_PLACE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{15,}$")
+
+
+def looks_like_place_id(s: str, strict: bool = False) -> bool:
+    """True if ``s`` is a bare Place ID rather than a URL or prose.
+
+    ``strict`` additionally requires the mixed-case-plus-digit shape real Place
+    IDs have. Use it for CUSTOMER text out of the CSV, where a single long word
+    ("Lastenradmanufaktur" -- customers really do type their company name into
+    the link box) would otherwise be mistaken for an ID and turned into a dead
+    review link that nobody notices until the sign is printed.
+
+    Operator-typed input needs no such guard: typing something into the
+    "Place ID / review link" box is already a statement of intent, and being
+    strict there would reject the unusual-but-valid ID the operator looked up
+    by hand -- the exact case this fallback exists to serve.
+    """
+    s = (s or "").strip()
+    if s.lower().startswith("http") or not _PLACE_ID_RE.match(s):
+        return False
+    if not strict:
+        return True
+    return (any(c.isdigit() for c in s)
+            and any(c.islower() for c in s)
+            and any(c.isupper() for c in s))
+
+
 def http_resolver(url: str, timeout: float = 8.0) -> str:
     """Follow redirects for short links (share.google / maps.app.goo.gl).
     Returns the final URL, or '' on failure."""
