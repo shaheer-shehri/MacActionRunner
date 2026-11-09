@@ -1,10 +1,16 @@
 name: Build NFC Print Tool
 
 # Builds the Windows .exe and macOS .app on native runners (PyInstaller can't
-# cross-compile). Both macOS builds run on the reliable Apple-Silicon runner
-# (macos-14): one native arm64, one x86_64 via Rosetta — because GitHub's Intel
-# runners (macos-13) are scarce. The x86_64 build runs on ALL Macs (Intel native
+# cross-compile). Both macOS builds run on the same Apple-Silicon runner
+# (macos-15): one native arm64, one x86_64 via Rosetta — because GitHub's Intel
+# runners (macos-13) are gone. The x86_64 build runs on ALL Macs (Intel native
 # + Apple Silicon via Rosetta), so it is the universal-coverage artifact.
+#
+# Pin the macOS image deliberately and only to a CURRENTLY PROVISIONED label:
+# a retired one is not an error you can read from the logs. macos-14 was
+# retired and its job died in 1 second with "The configuration
+# 'macos-14-arm64-us-default' is not supported" and zero steps recorded —
+# the run shows a cancelled job, not a failed build step (2026-11-09).
 # Assumes app/ contents (run.py, NFCPrintTool.spec, requirements.txt, qrnfc/, ui/)
 # are at the repo root.
 
@@ -24,7 +30,7 @@ jobs:
         include:
           - os: windows-latest
             artifact: NFCPrintTool-windows
-          - os: macos-14          # Apple Silicon runner, native build
+          - os: macos-15          # Apple Silicon runner, native build
             artifact: NFCPrintTool-macos-arm64
             macarch: arm64
           - os: macos-15          # macOS 15 (Apple Silicon) — x86_64 build via Rosetta.
